@@ -1,0 +1,414 @@
+/* =============================================================================
+   Wanted Design System — colors & type tokens
+   Sourced from the Wanted Design System Figma (CC BY 4.0, © Wanted Lab Inc.)
+   Last extraction: 2025-11-06 publication
+   ============================================================================= */
+
+/* ---- Fonts -------------------------------------------------------------- */
+/* Pretendard — self-hosted from /fonts/ (uploaded by Wanted) */
+@font-face {
+  font-family: "Pretendard";
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url("../wanted/fonts/Pretendard-Light.otf") format("opentype");
+}
+@font-face {
+  font-family: "Pretendard";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("../wanted/fonts/Pretendard-Regular.otf") format("opentype");
+}
+@font-face {
+  font-family: "Pretendard";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url("../wanted/fonts/Pretendard-Medium.otf") format("opentype");
+}
+/* SemiBold (600) file not provided — falls through to Bold for visual hierarchy */
+@font-face {
+  font-family: "Pretendard";
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("../wanted/fonts/Pretendard-Bold.otf") format("opentype");
+}
+/* Wanted Sans - brand display face (CDN) */
+@import url('https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.4/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css');
+/* Mono — JetBrains Mono as SF Mono substitute */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* ============================================================
+     ATOMIC COLOR PALETTE  (verbatim from Figma)
+     ============================================================ */
+
+  /* common — pure grayscale, used for borders + inverted surfaces */
+  --c-common-100: #FFFFFF;
+  --c-common-0: #000000;
+
+  /* neutral — pure-greyscale ramp (light → dark)              16 stops */
+  --c-neutral-99: #F7F7F7;
+  --c-neutral-95: #DCDCDC;
+  --c-neutral-90: #C4C4C4;
+  --c-neutral-80: #B0B0B0;
+  --c-neutral-70: #9B9B9B;
+  --c-neutral-60: #8A8A8A;
+  --c-neutral-50: #737373;
+  --c-neutral-40: #5C5C5C;
+  --c-neutral-30: #474747;
+  --c-neutral-22: #303030;
+  --c-neutral-20: #2A2A2A;
+  --c-neutral-15: #1C1C1C;
+  --c-neutral-10: #171717;
+  --c-neutral-5:  #0F0F0F;
+  --c-neutral-0:  #000000;
+
+  /* coolNeutral — the actual UI greyscale, slightly cool       23 stops */
+  --c-cool-99: #F7F7F8;
+  --c-cool-98: #F4F4F5;
+  --c-cool-97: #EAEBEC;
+  --c-cool-96: #E1E2E4;
+  --c-cool-95: #DBDCDF;
+  --c-cool-90: #C2C4C8;
+  --c-cool-80: #AEB0B6;
+  --c-cool-70: #989BA2;
+  --c-cool-60: #878A93;
+  --c-cool-50: #70737C;
+  --c-cool-40: #5A5C63;
+  --c-cool-30: #46474C;
+  --c-cool-25: #37383C;
+  --c-cool-23: #333438;
+  --c-cool-22: #2E2F33;
+  --c-cool-20: #292A2D;
+  --c-cool-17: #212225;
+  --c-cool-15: #1B1C1E;
+  --c-cool-10: #171719;
+  --c-cool-7:  #141415;
+  --c-cool-5:  #0F0F10;
+  --c-cool-0:  #000000;
+
+  /* blue — primary brand */
+  --c-blue-99: #F7FBFF;
+  --c-blue-95: #EAF2FE;
+  --c-blue-90: #C9DEFE;
+  --c-blue-80: #9EC5FF;
+  --c-blue-70: #69A5FF;
+  --c-blue-65: #4F95FF;
+  --c-blue-60: #3385FF;
+  --c-blue-55: #1A75FF;
+  --c-blue-50: #0066FF;   /* ← PRIMARY */
+  --c-blue-45: #005EEB;
+  --c-blue-40: #0054D1;
+  --c-blue-30: #003E9C;
+  --c-blue-20: #002966;
+  --c-blue-10: #001536;
+
+  /* red — destructive / negative */
+  --c-red-99: #FFFAFA;
+  --c-red-95: #FEECEC;
+  --c-red-90: #FED5D5;
+  --c-red-80: #FFB5B5;
+  --c-red-70: #FF8C8C;
+  --c-red-60: #FF6363;
+  --c-red-50: #FF4242;
+  --c-red-40: #E52222;    /* ← NEGATIVE */
+  --c-red-30: #B20C0C;
+  --c-red-20: #750404;
+  --c-red-10: #3B0101;
+
+  /* green — positive */
+  --c-green-99: #F2FFF6;
+  --c-green-95: #D9FFE6;
+  --c-green-90: #ACFCC7;
+  --c-green-80: #7DF5A5;
+  --c-green-70: #49E57D;
+  --c-green-60: #1ED45A;
+  --c-green-50: #00BF40;  /* ← POSITIVE */
+  --c-green-40: #009632;
+  --c-green-30: #006E25;
+  --c-green-20: #004517;
+  --c-green-10: #00240C;
+
+  /* orange */
+  --c-orange-99: #FFFCF7;
+  --c-orange-95: #FEF4E6;
+  --c-orange-90: #FEE6C6;
+  --c-orange-80: #FFD49C;
+  --c-orange-70: #FFC06E;
+  --c-orange-60: #FFA938;
+  --c-orange-50: #FF9200;
+  --c-orange-40: #D47800;
+  --c-orange-30: #9C5800;
+  --c-orange-20: #663A00;
+  --c-orange-10: #361E00;
+
+  /* red-orange — cautionary */
+  --c-redOrange-99: #FFFAF7;
+  --c-redOrange-95: #FEEEE5;
+  --c-redOrange-90: #FEDBC6;
+  --c-redOrange-80: #FFC09C;
+  --c-redOrange-70: #FF9C63;
+  --c-redOrange-60: #FF7B2E;
+  --c-redOrange-50: #FF5E00;  /* ← CAUTIONARY */
+  --c-redOrange-40: #F55A00;
+  --c-redOrange-30: #CC4B00;
+  --c-redOrange-20: #943600;
+  --c-redOrange-10: #5C2200;
+
+  /* lime */
+  --c-lime-99: #F8FFF2;
+  --c-lime-95: #E6FFD4;
+  --c-lime-90: #CCFCA9;
+  --c-lime-80: #AEF779;
+  --c-lime-70: #88F03E;
+  --c-lime-60: #6BE016;
+  --c-lime-50: #58CF04;
+  --c-lime-40: #48AD00;
+  --c-lime-37: #429E00;
+  --c-lime-30: #347D00;
+
+  /* cyan */
+  --c-cyan-99: #F7FEFF;
+  --c-cyan-95: #DEFAFF;
+  --c-cyan-90: #B5F4FF;
+  --c-cyan-80: #8AEDFF;
+  --c-cyan-70: #57DFF7;
+  --c-cyan-60: #28D0ED;
+  --c-cyan-50: #00BDDE;
+  --c-cyan-40: #0098B2;
+  --c-cyan-30: #006F82;
+
+  /* light-blue */
+  --c-lightBlue-99: #F7FDFF;
+  --c-lightBlue-95: #E5F6FE;
+  --c-lightBlue-90: #C4ECFE;
+  --c-lightBlue-80: #A1E1FF;
+  --c-lightBlue-70: #70D2FF;
+  --c-lightBlue-60: #3DC2FF;
+  --c-lightBlue-50: #00AEFF;
+  --c-lightBlue-40: #008DCF;
+
+  /* violet */
+  --c-violet-99: #FBFAFF;
+  --c-violet-95: #F0ECFE;
+  --c-violet-90: #DBD3FE;
+  --c-violet-80: #C0B0FF;
+  --c-violet-70: #9E86FC;
+  --c-violet-60: #7D5EF7;
+  --c-violet-50: #6541F2;
+  --c-violet-45: #5B37ED;
+  --c-violet-40: #4F29E5;
+  --c-violet-30: #3A16C9;
+
+  /* purple */
+  --c-purple-99: #FEFBFF;
+  --c-purple-95: #F9EDFF;
+  --c-purple-90: #F2D6FF;
+  --c-purple-80: #E9BAFF;
+  --c-purple-70: #DE96FF;
+  --c-purple-60: #D478FF;
+  --c-purple-50: #CB59FF;
+  --c-purple-40: #AD36E3;
+
+  /* pink */
+  --c-pink-99: #FFFAFE;
+  --c-pink-95: #FEECFB;
+  --c-pink-90: #FED3F7;
+  --c-pink-80: #FFB8F3;
+  --c-pink-70: #FF94ED;
+  --c-pink-60: #FA73E3;
+  --c-pink-50: #F553DA;
+  --c-pink-46: #E846CD;
+  --c-pink-40: #D331B8;
+
+  /* ============================================================
+     SEMANTIC TOKENS  —  light theme (default)
+     ============================================================ */
+
+  /* primary */
+  --primary-normal: var(--c-blue-50);          /* #0066FF */
+  --primary-strong: var(--c-blue-45);          /* hover */
+  --primary-heavy:  var(--c-blue-40);          /* press */
+
+  /* status */
+  --status-positive:    var(--c-green-50);     /* #00BF40 */
+  --status-cautionary:  var(--c-redOrange-50); /* #FF5E00 */
+  --status-negative:    var(--c-red-40);       /* #E52222 */
+
+  /* accent */
+  --accent-redOrange:   var(--c-redOrange-50);
+
+  /* labels (text) — opacity-driven, on light background */
+  --label-normal:    rgba(46, 47, 51, 0.88);   /* coolNeutral-22 @ 88% — primary text */
+  --label-strong:    rgba(23, 23, 25, 1.00);   /* coolNeutral-10 — headings */
+  --label-neutral:   rgba(55, 56, 60, 0.61);   /* coolNeutral-25 @ 61% — body 2 */
+  --label-alternative: rgba(55, 56, 60, 0.28); /* coolNeutral-25 @ 28% — captions */
+  --label-assistive: rgba(55, 56, 60, 0.16);   /* coolNeutral-25 @ 16% — disabled text */
+  --label-disable:   rgba(55, 56, 60, 0.16);
+
+  /* line / border */
+  --line-normal-normal:  rgba(112, 115, 124, 0.22);
+  --line-normal-neutral: rgba(112, 115, 124, 0.16);
+  --line-neutral:        rgba(112, 115, 124, 0.08);
+  --line-solid-normal:   var(--c-cool-95);
+
+  /* background */
+  --bg-normal-normal:    #FFFFFF;
+  --bg-normal-alternative: var(--c-cool-99);   /* page background */
+  --bg-elevated-normal:  #FFFFFF;
+  --bg-elevated-alternative: var(--c-cool-99);
+  --bg-inverse:          var(--c-cool-10);
+  --bg-dim:              rgba(23, 23, 25, 0.52);
+
+  /* fill / on-bg interactive */
+  --fill-normal:         rgba(112, 115, 124, 0.22);
+  --fill-neutral:        rgba(112, 115, 124, 0.08);
+  --fill-alternative:    rgba(112, 115, 124, 0.05);
+
+  /* inverse */
+  --inverse-primary:     var(--c-blue-60);     /* #3385FF — primary on dark */
+  --inverse-label:       #FFFFFF;
+  --inverse-bg:          var(--c-cool-10);
+
+  /* static (cross-theme constants) */
+  --static-white: #FFFFFF;
+  --static-black: #000000;
+
+  /* ============================================================
+     TYPE SYSTEM
+     ============================================================ */
+
+  --font-sans: "Pretendard", -apple-system,
+               BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo",
+               "Noto Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif;
+  --font-display: "Wanted Sans Variable", "Wanted Sans", var(--font-sans);
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* ============================================================
+     SPACING (4px base)
+     ============================================================ */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* ============================================================
+     RADII
+     ============================================================ */
+  --radius-2:  4px;
+  --radius-4:  8px;
+  --radius-6:  12px;
+  --radius-8:  16px;
+  --radius-12: 24px;
+  --radius-16: 32px;
+  --radius-32: 64px;
+  --radius-pill: 9999px;
+
+  /* ============================================================
+     SHADOWS / ELEVATION
+     ============================================================ */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-3: 0 8px 24px rgba(23, 23, 25, 0.10);
+  --shadow-4: 0 16px 40px rgba(23, 23, 25, 0.12);
+
+  /* ============================================================
+     MOTION
+     ============================================================ */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+}
+
+/* ============================================================
+   DARK THEME OVERRIDES
+   ============================================================ */
+[data-theme="dark"] {
+  --label-normal:    rgba(247, 247, 248, 0.88);
+  --label-strong:    rgba(247, 247, 248, 1.00);
+  --label-neutral:   rgba(247, 247, 248, 0.61);
+  --label-alternative: rgba(247, 247, 248, 0.28);
+  --label-assistive: rgba(247, 247, 248, 0.16);
+
+  --bg-normal-normal:    var(--c-cool-10);
+  --bg-normal-alternative: var(--c-cool-7);
+  --bg-elevated-normal:  var(--c-cool-15);
+  --bg-elevated-alternative: var(--c-cool-17);
+  --bg-inverse:          #FFFFFF;
+  --bg-dim:              rgba(23, 23, 25, 0.72);
+
+  --primary-normal: var(--c-blue-60);
+  --inverse-primary: var(--c-blue-50);
+  --inverse-label:  var(--c-cool-10);
+  --inverse-bg:     #FFFFFF;
+
+  --line-normal-normal:  rgba(174, 176, 182, 0.22);
+  --line-normal-neutral: rgba(174, 176, 182, 0.16);
+  --line-neutral:        rgba(174, 176, 182, 0.08);
+}
+
+/* ============================================================
+   SEMANTIC TYPE STYLES  —  paired with utility classes
+   ============================================================ */
+
+body {
+  font-family: var(--font-sans);
+  color: var(--label-normal);
+  background: var(--bg-normal-normal);
+  font-feature-settings: "ss06" on;        /* contextual Hangul */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.t-display-1   { font-size: 56px; line-height: 1.25;  letter-spacing: -0.017em; font-weight: 700; font-family: var(--font-display); }
+.t-display-2   { font-size: 40px; line-height: 1.3;   letter-spacing: -0.0282em; font-weight: 700; }
+.t-display-3   { font-size: 36px; line-height: 1.334; letter-spacing: -0.027em;  font-weight: 700; }
+
+.t-title-1     { font-size: 32px; line-height: 1.375; letter-spacing: -0.0253em; font-weight: 700; }
+.t-title-2     { font-size: 28px; line-height: 1.358; letter-spacing: -0.0236em; font-weight: 700; }
+.t-title-3     { font-size: 24px; line-height: 1.334; letter-spacing: -0.023em;  font-weight: 700; }
+
+.t-heading-1   { font-size: 22px; line-height: 1.364; letter-spacing: -0.0194em; font-weight: 700; }
+.t-heading-2   { font-size: 20px; line-height: 1.4;   letter-spacing: -0.012em;  font-weight: 700; }
+
+.t-headline-1  { font-size: 18px; line-height: 1.445; letter-spacing: -0.002em;  font-weight: 600; }
+.t-headline-2  { font-size: 17px; line-height: 1.412; letter-spacing: 0;         font-weight: 700; }
+
+.t-body-1-normal   { font-size: 16px; line-height: 1.5;   letter-spacing: 0.0057em; font-weight: 500; }
+.t-body-1-reading  { font-size: 16px; line-height: 1.625; letter-spacing: 0.0057em; font-weight: 500; }
+.t-body-2-normal   { font-size: 15px; line-height: 1.467; letter-spacing: 0.0096em; font-weight: 500; }
+.t-body-2-reading  { font-size: 15px; line-height: 1.6;   letter-spacing: 0.0096em; font-weight: 500; }
+
+.t-label-1-normal  { font-size: 14px; line-height: 1.429; letter-spacing: 0.0145em; font-weight: 600; }
+.t-label-1-reading { font-size: 14px; line-height: 1.571; letter-spacing: 0.0145em; font-weight: 500; }
+.t-label-2         { font-size: 13px; line-height: 1.385; letter-spacing: 0.0194em; font-weight: 600; }
+
+.t-caption-1   { font-size: 12px; line-height: 1.334; letter-spacing: 0.0252em; font-weight: 500; }
+.t-caption-2   { font-size: 11px; line-height: 1.273; letter-spacing: 0.0311em; font-weight: 700; }
+
+/* default heading semantics — mapped to type tokens */
+h1 { font-size: 36px; line-height: 1.334; letter-spacing: -0.027em;  font-weight: 700; color: var(--label-strong); }
+h2 { font-size: 28px; line-height: 1.358; letter-spacing: -0.0236em; font-weight: 700; color: var(--label-strong); }
+h3 { font-size: 22px; line-height: 1.364; letter-spacing: -0.0194em; font-weight: 700; color: var(--label-strong); }
+h4 { font-size: 18px; line-height: 1.445; letter-spacing: -0.002em;  font-weight: 600; color: var(--label-strong); }
+h5 { font-size: 16px; line-height: 1.5;   letter-spacing: 0.0057em;  font-weight: 700; color: var(--label-strong); }
+p, li, span { font-size: 16px; line-height: 1.5; letter-spacing: 0.0057em; }
+small { font-size: 12px; line-height: 1.334; letter-spacing: 0.0252em; color: var(--label-neutral); }
+code, pre, kbd { font-family: var(--font-mono); font-size: 14px; }
+
+/* Korean: avoid font-feature 'ss06' on roman-only context — kept conservative */

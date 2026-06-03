@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>안심 케어 · 새 환자 등록</title>
+<link rel="stylesheet" href="wanted/colors_and_type.css" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: #f1f0ec;
+    font-family: var(--font-sans);
+    color: var(--label-normal);
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .stage { padding: 40px; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div id="mount"></div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="android-frame.jsx"></script>
+
+<script type="text/babel">
+const RELATIONS = ['어머니', '아버지', '할머니', '할아버지', '배우자', '기타'];
+const GENDERS = [
+  { id: 'female', label: '여성' },
+  { id: 'male',   label: '남성' },
+];
+
+function NewPatient() {
+  const [phase, setPhase] = React.useState('loading'); // 'loading' | 'form'
+
+  React.useEffect(() => {
+    if (phase !== 'loading') return;
+    const t = setTimeout(() => setPhase('form'), 2400);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  const [name, setName]         = React.useState('');
+  const [relation, setRelation] = React.useState(null);
+  const [birth, setBirth]       = React.useState('');   // YYYY-MM-DD
+  const [gender, setGender]     = React.useState(null);
+  const [note, setNote]         = React.useState('');
+
+  const age = React.useMemo(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birth)) return null;
+    const [y, m, d] = birth.split('-').map(Number);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const today = new Date(2026, 4, 23); // 2026-05-23
+    let a = today.getFullYear() - y;
+    const bm = today.getMonth() + 1;
+    const bd = today.getDate();
+    if (m > bm || (m === bm && d > bd)) a -= 1;
+    return a >= 0 && a < 130 ? a : null;
+  }, [birth]);
+
+  const valid = name.trim().length > 0 && relation && age !== null && gender;
+
+  return (
+    <AndroidDevice width={360} height={760}>
+      {phase === 'loading' ? (
+        <LoadingSplash onSkip={() => setPhase('form')} />
+      ) : (
+        <FormView
+          name={name} setName={setName}
+          relation={relation} setRelation={setRelation}
+          birth={birth} setBirth={setBirth}
+          gender={gender} setGender={setGender}
+          note={note} setNote={setNote}
+          age={age} valid={valid}
+        />
+      )}
+    </AndroidDevice>
+  );
+}
+
+// ─── Loading splash ─────────────────────────────────────────
+function LoadingSplash({ onSkip }) {
+  return (
+    <div onClick={onSkip} style={{
+      height: '100%', background: '#fff',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'var(--font-sans)', cursor: 'pointer',
+      padding: '0 32px',
+      animation: 'splashIn 400ms var(--ease-standard)',
+    }}>
+      <style>{`
+        @keyframes splashIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes logoFloat {
+          0%, 100% { transform: translateY(0); }
+          50%      { transform: translateY(-6px); }
+        }
+        @keyframes ringSpin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes textFadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes dotPulse {
+          0%, 100% { opacity: 0.25; }
+          50%      { opacity: 1; }
+        }
+      `}</style>
+
+      {/* Logo + spinner ring */}
+      <div style={{ position: 'relative', width: 96, height: 96 }}>
+        {/* spinning ring */}
+        <svg width="96" height="96" viewBox="0 0 96 96"
+          style={{ position: 'absolute', inset: 0, animation: 'ringSpin 1.6s linear infinite' }}>
+          <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(0,102,255,0.10)" strokeWidth="3"/>
+          <circle cx="48" cy="48" r="42" fill="none" stroke="var(--primary-normal)" strokeWidth="3"
+            strokeLinecap="round" strokeDasharray="66 264"/>
+        </svg>
+        {/* logo */}
+        <div style={{
+          position: 'absolute', inset: 12,
+          background: 'var(--primary-normal)', borderRadius: 20,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 10px 24px rgba(0,102,255,0.22)',
+          animation: 'logoFloat 2.4s ease-in-out infinite',
+        }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>
+            <path d="M9 12.5l2.2 2.2L15.5 10"/>
+          </svg>
+        </div>
+      </div>
+
+      {/* Text */}
+      <div style={{
+        marginTop: 32, textAlign: 'center',
+        animation: 'textFadeIn 600ms 200ms both var(--ease-standard)',
+      }}>
+        <div style={{
+          fontSize: 12, fontWeight: 700, color: 'var(--primary-normal)',
+          letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12,
+        }}>환영합니다</div>
+        <h1 style={{
+          margin: 0,
+          fontFamily: 'var(--font-display)',
+          fontSize: 22, fontWeight: 700,
+          letterSpacing: '-0.022em', lineHeight: 1.35,
+          color: 'var(--label-strong)',
+        }}>돌봄을 시작할<br/>준비를 하고 있어요</h1>
+      </div>
+
+      {/* Loading dots */}
+      <div style={{
+        marginTop: 28, display: 'flex', gap: 6, alignItems: 'center',
+      }}>
+        {[0, 1, 2].map((i) => (
+          <span key={i} style={{
+            width: 6, height: 6, borderRadius: 999,
+            background: 'var(--primary-normal)',
+            animation: `dotPulse 1.2s ${i * 0.18}s ease-in-out infinite`,
+          }}/>
+        ))}
+      </div>
+
+      {/* hint */}
+      <div style={{
+        position: 'absolute', bottom: 32, left: 0, right: 0, textAlign: 'center',
+        fontSize: 11.5, fontWeight: 500, color: 'var(--label-alternative)',
+        letterSpacing: '0.04em',
+      }}>화면을 터치해 계속하기</div>
+    </div>
+  );
+}
+
+// ─── Form view (extracted from previous inline JSX) ────────────────────
+function FormView({ name, setName, relation, setRelation, birth, setBirth, gender, setGender, note, setNote, age, valid }) {
+  return (
+    <div style={{
+        height: '100%', background: '#fff',
+        display: 'flex', flexDirection: 'column',
+        fontFamily: 'var(--font-sans)', color: 'var(--label-normal)',
+      }}>
+        {/* Top bar */}
+        <div style={{ padding: '8px 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button aria-label="뒤로" style={{
+            width: 40, height: 40, borderRadius: 999, border: 'none',
+            background: 'transparent', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--label-strong)',
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 6l-6 6 6 6"/>
+            </svg>
+          </button>
+          <div style={{ flex: 1 }} />
+          <button style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 600, color: 'var(--label-neutral)',
+            padding: '8px 12px',
+          }}>나중에</button>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {/* Header */}
+          <div style={{ padding: '8px 28px 8px' }}>
+            <h1 style={{
+              margin: 0,
+              fontFamily: 'var(--font-display)',
+              fontSize: 22, fontWeight: 700,
+              letterSpacing: '-0.024em', lineHeight: 1.3,
+              color: 'var(--label-strong)',
+              whiteSpace: 'nowrap',
+              display: 'inline',
+              background: 'linear-gradient(180deg, transparent 60%, rgba(0,102,255,0.28) 60%)',
+              padding: '0 2px',
+            }}>
+              함께 챙길 가족을 알려주세요
+            </h1>
+          </div>
+
+          {/* Form */}
+          <div style={{ padding: '28px 24px 24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <Field label="이름" required>
+              <TextInput value={name} onChange={setName} placeholder="예) 이순자" />
+            </Field>
+
+            <Field label="관계" required>
+              <Dropdown options={RELATIONS} value={relation} onChange={setRelation} placeholder="관계를 선택하세요" />
+            </Field>
+
+            <Field label="생년월일" required>
+              <DateInput value={birth} onChange={setBirth} />
+              <Helper>
+                {age !== null
+                  ? <span style={{ color: 'var(--primary-normal)', fontWeight: 700 }}>만 {age}세</span>
+                  : '나이는 자동으로 계산되어요'}
+              </Helper>
+            </Field>
+
+            <Field label="성별" required>
+              <SegmentedControl options={GENDERS} value={gender} onChange={setGender} />
+            </Field>
+
+            <Field label="주의사항" optional>
+              <TextArea value={note} onChange={setNote}
+                placeholder="복용 중인 약, 알러지, 만성질환 등"
+                count={note.length} max={200} />
+            </Field>
+          </div>
+        </div>
+
+        {/* Sticky bottom CTA */}
+        <div style={{
+          padding: '12px 24px 20px',
+          borderTop: '1px solid var(--line-normal-neutral)',
+          background: '#fff',
+        }}>
+          <button disabled={!valid} style={{
+            width: '100%', height: 52, borderRadius: 12, border: 'none',
+            background: valid ? 'var(--primary-normal)' : 'var(--fill-neutral)',
+            color: valid ? '#fff' : 'var(--label-alternative)',
+            fontSize: 15, fontWeight: 700, letterSpacing: '-0.005em',
+            cursor: valid ? 'pointer' : 'not-allowed',
+            boxShadow: valid ? '0 4px 12px rgba(0,102,255,0.18)' : 'none',
+            transition: 'background 150ms',
+          }}>{valid ? '돌봄 시작하기' : '필수 항목을 입력해주세요'}</button>
+        </div>
+      </div>
+  );
+}
+
+// ─── Field wrapper ─────────────────────────────────────────────────
+function Field({ label, optional, required, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <span style={{
+        fontSize: 15, fontWeight: 700, color: 'var(--label-strong)',
+        letterSpacing: '-0.008em',
+      }}>
+        {label}
+        {required && (
+          <span style={{
+            marginLeft: 4, color: 'var(--primary-normal)', fontWeight: 700,
+          }}>*</span>
+        )}
+        {optional && (
+          <span style={{
+            marginLeft: 6, fontSize: 13, fontWeight: 500,
+            color: 'var(--label-alternative)',
+          }}>· 선택</span>
+        )}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+// ─── Helper (caption below an input) ───────────────────────────────
+function Helper({ children }) {
+  return (
+    <span style={{
+      fontSize: 12.5, fontWeight: 500, lineHeight: 1.4,
+      color: 'var(--label-neutral)', letterSpacing: '-0.002em',
+      marginTop: -2,
+    }}>{children}</span>
+  );
+}
+
+// ─── TextInput ─────────────────────────────────────────────────────
+function TextInput({ value, onChange, placeholder, type = 'text' }) {
+  const [focus, setFocus] = React.useState(false);
+  return (
+    <input
+      type={type} value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+      style={{
+        height: 50, padding: '0 14px', borderRadius: 12,
+        border: '1px solid ' + (focus ? 'var(--primary-normal)' : 'var(--line-normal-normal)'),
+        background: '#fff',
+        fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 500,
+        color: 'var(--label-strong)', outline: 'none',
+        boxShadow: focus ? '0 0 0 3px rgba(0,102,255,0.10)' : 'none',
+        transition: 'border 120ms, box-shadow 120ms',
+      }}
+    />
+  );
+}
+
+// ─── DateInput (YYYY / MM / DD) ────────────────────────────────────
+function DateInput({ value, onChange }) {
+  const [y, m, d] = value ? value.split('-') : ['', '', ''];
+  const [focused, setFocused] = React.useState(null);
+  const refs = [React.useRef(), React.useRef(), React.useRef()];
+
+  const set = (idx, v, max) => {
+    v = v.replace(/[^0-9]/g, '').slice(0, max);
+    const parts = [y, m, d];
+    parts[idx] = v;
+    onChange(parts.join('-'));
+    if (idx < 2 && v.length === max) refs[idx + 1].current?.focus();
+  };
+
+  const cell = (val, idx, max, ph) => (
+    <input
+      ref={refs[idx]}
+      value={val}
+      placeholder={ph}
+      inputMode="numeric"
+      onChange={(e) => set(idx, e.target.value, max)}
+      onFocus={() => setFocused(idx)}
+      onBlur={() => setFocused(null)}
+      style={{
+        flex: idx === 0 ? 1.5 : 1,
+        minWidth: 0, width: 0,
+        height: 50, padding: '0 8px', textAlign: 'center',
+        border: '1px solid ' + (focused === idx ? 'var(--primary-normal)' : 'var(--line-normal-normal)'),
+        borderRadius: 12, background: '#fff',
+        fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700,
+        color: 'var(--label-strong)', outline: 'none',
+        boxShadow: focused === idx ? '0 0 0 3px rgba(0,102,255,0.10)' : 'none',
+        transition: 'border 120ms, box-shadow 120ms',
+      }}
+    />
+  );
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {cell(y, 0, 4, 'YYYY')}
+      <span style={{ color: 'var(--label-alternative)', fontWeight: 700 }}>·</span>
+      {cell(m, 1, 2, 'MM')}
+      <span style={{ color: 'var(--label-alternative)', fontWeight: 700 }}>·</span>
+      {cell(d, 2, 2, 'DD')}
+    </div>
+  );
+}
+
+// ─── ChipGroup ─────────────────────────────────────────────────────
+function ChipGroup({ options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {options.map((opt) => {
+        const active = value === opt;
+        return (
+          <button key={opt} type="button" onClick={() => onChange(opt)} style={{
+            padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+            background: active ? 'var(--primary-normal)' : '#fff',
+            color: active ? '#fff' : 'var(--label-normal)',
+            border: '1px solid ' + (active ? 'var(--primary-normal)' : 'var(--line-normal-normal)'),
+            fontSize: 13.5, fontWeight: active ? 700 : 600,
+            letterSpacing: '-0.005em',
+            transition: 'all 120ms',
+            boxShadow: active ? '0 2px 6px rgba(0,102,255,0.18)' : 'none',
+          }}>{opt}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Dropdown
+function Dropdown({ options, value, onChange, placeholder }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen(!open)} style={{
+        width: '100%', height: 50, padding: '0 14px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        background: '#fff', cursor: 'pointer', textAlign: 'left',
+        border: '1px solid ' + (open ? 'var(--primary-normal)' : 'var(--line-normal-normal)'),
+        borderRadius: 12,
+        boxShadow: open ? '0 0 0 3px rgba(0,102,255,0.10)' : 'none',
+        transition: 'border 120ms, box-shadow 120ms',
+        fontFamily: 'var(--font-sans)',
+      }}>
+        <span style={{
+          fontSize: 15, fontWeight: value ? 600 : 500,
+          color: value ? 'var(--label-strong)' : 'var(--label-alternative)',
+          letterSpacing: '-0.005em',
+        }}>{value || placeholder}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke={open ? 'var(--primary-normal)' : 'var(--label-neutral)'}
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 5,
+          background: '#fff', borderRadius: 12,
+          border: '1px solid var(--line-normal-normal)',
+          boxShadow: '0 12px 32px rgba(23,23,25,0.12)',
+          padding: 4, maxHeight: 280, overflowY: 'auto',
+        }}>
+          {options.map((opt) => {
+            const active = value === opt;
+            return (
+              <button key={opt} type="button"
+                onClick={() => { onChange(opt); setOpen(false); }}
+                style={{
+                  width: '100%', padding: '12px 12px', borderRadius: 8,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  background: active ? 'rgba(0,102,255,0.08)' : 'transparent',
+                  border: 'none', cursor: 'pointer', textAlign: 'left',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14.5, fontWeight: active ? 700 : 500,
+                  color: active ? 'var(--primary-normal)' : 'var(--label-strong)',
+                  letterSpacing: '-0.005em',
+                }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--fill-alternative)'; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
+                <span>{opt}</span>
+                {active && (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12.5l4.5 4.5L19 7.5"/>
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SegmentedControl ──────────────────────────────────────────────
+function SegmentedControl({ options, value, onChange }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: `repeat(${options.length}, 1fr)`,
+      gap: 4, padding: 4, background: 'var(--fill-alternative)',
+      borderRadius: 12,
+    }}>
+      {options.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button key={opt.id} type="button" onClick={() => onChange(opt.id)} style={{
+            height: 42, borderRadius: 9, border: 'none', cursor: 'pointer',
+            background: active ? '#fff' : 'transparent',
+            color: active ? 'var(--label-strong)' : 'var(--label-neutral)',
+            fontSize: 14, fontWeight: active ? 700 : 600,
+            letterSpacing: '-0.005em',
+            boxShadow: active ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+            transition: 'all 120ms',
+          }}>{opt.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── TextArea ──────────────────────────────────────────────────────
+function TextArea({ value, onChange, placeholder, count, max }) {
+  const [focus, setFocus] = React.useState(false);
+  return (
+    <div style={{
+      border: '1px solid ' + (focus ? 'var(--primary-normal)' : 'var(--line-normal-normal)'),
+      borderRadius: 12, background: '#fff',
+      boxShadow: focus ? '0 0 0 3px rgba(0,102,255,0.10)' : 'none',
+      transition: 'border 120ms, box-shadow 120ms',
+    }}>
+      <textarea
+        value={value}
+        placeholder={placeholder}
+        maxLength={max}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+        rows={3}
+        style={{
+          width: '100%', padding: '12px 14px 6px', boxSizing: 'border-box',
+          border: 'none', background: 'transparent', resize: 'none',
+          fontFamily: 'var(--font-sans)', fontSize: 14.5, fontWeight: 500,
+          lineHeight: 1.5, color: 'var(--label-strong)',
+          outline: 'none',
+        }}
+      />
+      <div style={{
+        padding: '0 14px 8px',
+        textAlign: 'right',
+        fontSize: 11, fontWeight: 600,
+        color: 'var(--label-alternative)',
+        letterSpacing: '0.02em',
+        fontVariantNumeric: 'tabular-nums',
+      }}>{count} / {max}</div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('mount')).render(<NewPatient />);
+</script>
+
+</body>
+</html>
