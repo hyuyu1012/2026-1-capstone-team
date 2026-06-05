@@ -4,23 +4,42 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'data/auth_service.dart';
+import 'data/notification_service.dart';
 import 'data/patient_link_service.dart';
 import 'data/schedule_service.dart';
+import 'data/tts_service.dart';
 import 'firebase_options.dart';
 import 'models/patient.dart';
 import 'screens/claim_screen.dart';
 import 'screens/onboarding/login_screen.dart';
 import 'screens/schedule_screen.dart';
+import 'sensing/med_sensing_binder.dart';
+import 'sensing/med_sensing_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const PatientApp());
+  final notifications = NotificationService();
+  await notifications.init();
+  final tts = TtsService();
+
+  // Cold start: if a full-screen reminder launched the app, read it aloud.
+  final launchItem = await notifications.launchReminder();
+  if (launchItem != null) {
+    // Let the fixed notification clip play first, then speak the specifics.
+    Future.delayed(const Duration(milliseconds: 1200),
+        () => tts.speakItem(launchItem));
+  }
+
+  runApp(PatientApp(notifications: notifications, tts: tts));
 }
 
 class PatientApp extends StatelessWidget {
-  const PatientApp({super.key});
+  const PatientApp({super.key, required this.notifications, required this.tts});
+
+  final NotificationService notifications;
+  final TtsService tts;
 
   @override
   Widget build(BuildContext context) {
@@ -29,15 +48,67 @@ class PatientApp extends StatelessWidget {
         Provider<AuthService>(create: (_) => AuthService()),
         Provider<PatientLinkService>(create: (_) => PatientLinkService()),
         Provider<ScheduleService>(create: (_) => ScheduleService()),
+        Provider<NotificationService>.value(value: notifications),
+        Provider<TtsService>.value(value: tts),
+        // YAMNet sensing engine — one instance for the session. Lifecycle
+        // (init/start/stop) is driven by MedSensingBinder once a patient is known.
+        Provider<MedSensingService>(
+          create: (_) => MedSensingService(),
+          dispose: (_, s) => s.dispose(),
+        ),
       ],
       child: MaterialApp(
         title: '안심 케어 — 환자',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
-        home: const AuthGate(),
+        home: const _ReminderSpeaker(child: AuthGate()),
       ),
     );
   }
+}
+
+/// Watches the app lifecycle: when a full-screen reminder brings an
+/// already-running app to the foreground, read the due item aloud. (Cold-start
+/// launches are handled in main() via NotificationService.launchReminder.)
+class _ReminderSpeaker extends StatefulWidget {
+  const _ReminderSpeaker({required this.child});
+  final Widget child;
+
+  @override
+  State<_ReminderSpeaker> createState() => _ReminderSpeakerState();
+}
+
+class _ReminderSpeakerState extends State<_ReminderSpeaker>
+    with WidgetsBindingObserver {
+  // Guard so one reminder isn't spoken twice (e.g. resume fires repeatedly).
+  String? _lastSpokenKey;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final now = DateTime.now();
+    final due = context.read<NotificationService>().dueItemAround(now);
+    if (due == null) return;
+    final key = '${due.id}@${now.hour}:${now.minute}';
+    if (key == _lastSpokenKey) return;
+    _lastSpokenKey = key;
+    context.read<TtsService>().speakItem(due);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Routes by auth + claim state: signed-out → Login; signed-in but no claimed
@@ -77,7 +148,12 @@ class _PatientHome extends StatelessWidget {
         }
         final patient = snap.data;
         if (patient == null) return const ClaimScreen();
-        return ScheduleScreen(patient: patient);
+        // Wrap the schedule UI so the sensing engine starts/stops with it and
+        // its results are written back to this patient's schedules.
+        return MedSensingBinder(
+          patientId: patient.id,
+          child: ScheduleScreen(patient: patient),
+        );
       },
     );
   }

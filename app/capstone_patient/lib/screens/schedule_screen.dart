@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth_service.dart';
+import '../data/notification_service.dart';
 import '../data/schedule_service.dart';
 import '../models/patient.dart';
 import '../models/schedule_item.dart';
+import '../sensing/med_sensing_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 
@@ -44,6 +46,12 @@ class ScheduleScreen extends StatelessWidget {
                     );
                   }
                   final items = snap.data ?? const [];
+                  // Keep the daily voice reminders in sync with the live
+                  // schedule. syncSchedules no-ops when the set is unchanged.
+                  context.read<NotificationService>().syncSchedules(items);
+                  // Feed the same live schedule to the YAMNet sensing engine so
+                  // it knows when to open meal/medication monitoring windows.
+                  context.read<MedSensingService>().setSchedule(items);
                   if (items.isEmpty) return const _Empty();
                   return ListView.separated(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -78,7 +86,10 @@ class _Header extends StatelessWidget {
               const Spacer(),
               IconButton(
                 tooltip: '로그아웃',
-                onPressed: () => context.read<AuthService>().signOut(),
+                onPressed: () {
+                  context.read<NotificationService>().cancelAll();
+                  context.read<AuthService>().signOut();
+                },
                 icon: const Icon(Icons.logout_rounded,
                     size: 20, color: AppColors.labelNeutral),
               ),

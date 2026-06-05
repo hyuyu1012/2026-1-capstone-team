@@ -32,10 +32,17 @@ const List<({String id, String name, String time})> _registeredMeals = [
   (id: 'dinner', name: '저녁', time: '18:30'),
 ];
 
-const List<({String id, String label, int offsetMin})> _timingOptions = [
-  (id: 'before', label: '식전', offsetMin: -30),
-  (id: 'after', label: '식후', offsetMin: 30),
+// `sign` is the direction relative to the meal (식전 = before = -1, 식후 = +1);
+// the magnitude (minutes) is chosen by the guardian per registration.
+const List<({String id, String label, int sign})> _timingOptions = [
+  (id: 'before', label: '식전', sign: -1),
+  (id: 'after', label: '식후', sign: 1),
 ];
+
+/// Allowed range / step for the editable 식전·식후 offset (minutes).
+const int _offsetMinValue = 0;
+const int _offsetMaxValue = 120;
+const int _offsetStep = 1;
 
 /// Period-of-day label for a "HH:mm" time.
 String _periodOf(String time) {
@@ -363,6 +370,7 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
   final _dose = TextEditingController();
   final Set<String> _meals = {};
   final Set<String> _timings = {'after'};
+  int _offsetMin = 30; // 식사 기준 ±몇 분에 복용 알림을 줄지 (사용자 조절)
   bool _guardianCanDefer = true;
 
   bool get _canSave =>
@@ -381,7 +389,10 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
       if (!_meals.contains(m.id)) continue;
       for (final t in _timingOptions) {
         if (!_timings.contains(t.id)) continue;
-        out.add((label: '${m.name} ${t.label} 30분', time: _addMinutes(m.time, t.offsetMin)));
+        out.add((
+          label: '${m.name} ${t.label} $_offsetMin분',
+          time: _addMinutes(m.time, t.sign * _offsetMin),
+        ));
       }
     }
     out.sort((a, b) => a.time.compareTo(b.time));
@@ -443,13 +454,26 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
         const SizedBox(height: 22),
 
         // 복용 시점
-        const FieldLabel('복용 시점'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const FieldLabel('복용 시점', inline: true),
+            _MinuteStepper(
+              minutes: _offsetMin,
+              onChanged: (v) => setState(() => _offsetMin = v),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
             for (var i = 0; i < _timingOptions.length; i++) ...[
               if (i > 0) const SizedBox(width: 8),
               Expanded(child: _TimingOption(
                 option: _timingOptions[i],
+                minutes: _offsetMin,
                 active: _timings.contains(_timingOptions[i].id),
                 onTap: () => setState(() {
                   final id = _timingOptions[i].id;
@@ -531,8 +555,14 @@ class _MealOption extends StatelessWidget {
 }
 
 class _TimingOption extends StatelessWidget {
-  const _TimingOption({required this.option, required this.active, required this.onTap});
-  final ({String id, String label, int offsetMin}) option;
+  const _TimingOption({
+    required this.option,
+    required this.minutes,
+    required this.active,
+    required this.onTap,
+  });
+  final ({String id, String label, int sign}) option;
+  final int minutes;
   final bool active;
   final VoidCallback onTap;
 
@@ -554,7 +584,7 @@ class _TimingOption extends StatelessWidget {
             SquareCheck(checked: active, size: 20),
             const SizedBox(width: 8),
             Text(
-              '${option.label} 30분',
+              '${option.label} $minutes분',
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w600,
@@ -563,6 +593,119 @@ class _TimingOption extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline − / value / + control for the 식전·식후 offset minutes. Clamps to
+/// [_offsetMinValue].._offsetMaxValue in [_offsetStep] increments.
+class _MinuteStepper extends StatelessWidget {
+  const _MinuteStepper({required this.minutes, required this.onChanged});
+  final int minutes;
+  final ValueChanged<int> onChanged;
+
+  /// Tap the value to type an exact minute (1-min precision without 100 taps).
+  Future<void> _promptMinutes(BuildContext context) async {
+    final controller = TextEditingController(text: '$minutes');
+    final entered = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('복용 간격 (분)'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            suffixText: '분',
+            helperText: '$_offsetMinValue ~ $_offsetMaxValue분',
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, int.tryParse(v.trim())),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, int.tryParse(controller.text.trim())),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+    if (entered != null) {
+      onChanged(entered.clamp(_offsetMinValue, _offsetMaxValue));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canDec = minutes > _offsetMinValue;
+    final canInc = minutes < _offsetMaxValue;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.lineNormalNormal),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StepBtn(
+            icon: Icons.remove_rounded,
+            enabled: canDec,
+            onTap: () => onChanged((minutes - _offsetStep).clamp(_offsetMinValue, _offsetMaxValue)),
+          ),
+          GestureDetector(
+            onTap: () => _promptMinutes(context),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 52),
+              alignment: Alignment.center,
+              child: Text(
+                '$minutes분',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.065,
+                  color: AppColors.labelStrong,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+          _StepBtn(
+            icon: Icons.add_rounded,
+            enabled: canInc,
+            onTap: () => onChanged((minutes + _offsetStep).clamp(_offsetMinValue, _offsetMaxValue)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepBtn extends StatelessWidget {
+  const _StepBtn({required this.icon, required this.enabled, required this.onTap});
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: enabled ? AppColors.primary08 : AppColors.fillAlternative,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? AppColors.primary : AppColors.labelAlternative,
         ),
       ),
     );

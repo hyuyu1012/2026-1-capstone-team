@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -59,29 +61,80 @@ class HomeScreen extends StatelessWidget {
         // 복용 일정 — list.
         const SizedBox(height: 20),
         SectionHeader(label: '복용 일정', trailing: '${care.doneCount} / ${care.totalCount}'),
-        AppCard(
-          radius: 14,
-          clip: true,
-          child: Column(
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Dismissible(
-                  key: ValueKey(items[i].id),
-                  direction: DismissDirection.endToStart,
-                  background: const _DeleteBackground(),
-                  confirmDismiss: (_) => _confirmDelete(context, items[i]),
-                  onDismissed: (_) => _deleteItem(context, items[i].id),
-                  child: ScheduleRow(
-                    item: items[i],
-                    first: i == 0,
-                    onTap: () => care.toggleItem(items[i].id),
-                    onLongPress: () => ScheduleEditSheet.show(context, items[i]),
-                  ),
-                ),
-            ],
-          ),
-        ),
+        _ScheduleList(items: items),
       ],
+    );
+  }
+}
+
+/// Swipe-to-delete checklist of today's items. Stateful so a per-minute ticker
+/// can re-flag items whose scheduled time has passed (overdue → red), matching
+/// the live "지금" hand on [TodayRing].
+class _ScheduleList extends StatefulWidget {
+  const _ScheduleList({required this.items});
+
+  final List<ScheduleItem> items;
+
+  @override
+  State<_ScheduleList> createState() => _ScheduleListState();
+}
+
+class _ScheduleListState extends State<_ScheduleList> {
+  late DateTime _now;
+  Timer? _timer;
+
+  int get _nowMin => _now.hour * 60 + _now.minute;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _scheduleTick();
+  }
+
+  /// Refresh on the next minute boundary, then every minute after.
+  void _scheduleTick() {
+    final next = DateTime(_now.year, _now.month, _now.day, _now.hour, _now.minute)
+        .add(const Duration(minutes: 1));
+    _timer = Timer(next.difference(_now), () {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _scheduleTick();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final care = context.watch<CareProvider>();
+    final items = widget.items;
+    return AppCard(
+      radius: 14,
+      clip: true,
+      child: Column(
+        children: [
+          for (var i = 0; i < items.length; i++)
+            Dismissible(
+              key: ValueKey(items[i].id),
+              direction: DismissDirection.endToStart,
+              background: const _DeleteBackground(),
+              confirmDismiss: (_) => _confirmDelete(context, items[i]),
+              onDismissed: (_) => _deleteItem(context, items[i].id),
+              child: ScheduleRow(
+                item: items[i],
+                first: i == 0,
+                overdue: !items[i].taken && items[i].scheduledMinutes < _nowMin,
+                onTap: () => care.toggleItem(items[i].id),
+                onLongPress: () => ScheduleEditSheet.show(context, items[i]),
+              ),
+            ),
+        ],
+      ),
     );
   }
 

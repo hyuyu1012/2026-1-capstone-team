@@ -14,6 +14,7 @@ class ScheduleRow extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.missed = false,
+    this.overdue = false,
   });
 
   final ScheduleItem item;
@@ -23,6 +24,10 @@ class ScheduleRow extends StatelessWidget {
 
   /// When the item is not taken: `true` → missed (red ✕), `false` → pending.
   final bool missed;
+
+  /// 홈에서 예정 시각이 지났지만 아직 완료하지 않은 항목 — 빨간 계열로 강조.
+  /// [missed] 가 우선한다.
+  final bool overdue;
 
   static const Color _strike = Color.fromRGBO(55, 56, 60, 0.32);
 
@@ -38,7 +43,7 @@ class ScheduleRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _Checkbox(taken: taken, missed: missed),
+          _Checkbox(taken: taken, missed: missed, overdue: overdue && !missed),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -59,7 +64,7 @@ class ScheduleRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                _TimeLine(item: item),
+                _TimeLine(item: item, overdue: overdue && !missed),
               ],
             ),
           ),
@@ -74,8 +79,9 @@ class ScheduleRow extends StatelessWidget {
 
 /// Scheduled time, plus `→ {actual}` (in primary) once taken.
 class _TimeLine extends StatelessWidget {
-  const _TimeLine({required this.item});
+  const _TimeLine({required this.item, this.overdue = false});
   final ScheduleItem item;
+  final bool overdue;
 
   static const TextStyle _base = TextStyle(
     fontSize: 11.5,
@@ -87,11 +93,17 @@ class _TimeLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheduled = overdue
+        ? _base.copyWith(
+            color: AppColors.statusCautionary,
+            fontWeight: FontWeight.w600,
+          )
+        : _base;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
       children: [
-        Text(item.time, style: _base),
+        Text(item.time, style: scheduled),
         if (item.taken && item.takenAt != null) ...[
           const SizedBox(width: 5),
           Text('→', style: _base.copyWith(fontSize: 10)),
@@ -107,13 +119,18 @@ class _TimeLine extends StatelessWidget {
 }
 
 class _Checkbox extends StatelessWidget {
-  const _Checkbox({required this.taken, required this.missed});
+  const _Checkbox({required this.taken, required this.missed, this.overdue = false});
   final bool taken;
   final bool missed;
+  final bool overdue;
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = missed ? AppColors.red60 : AppColors.lineNormalNormal;
+    final borderColor = missed
+        ? AppColors.red60
+        : overdue
+            ? AppColors.statusCautionary
+            : AppColors.lineNormalNormal;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       width: 22,

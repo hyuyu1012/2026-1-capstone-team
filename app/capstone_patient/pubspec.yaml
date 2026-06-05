@@ -44,6 +44,25 @@ dependencies:
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.4
 
+  # Local notifications for medication/meal reminders. We schedule one daily
+  # repeating notification per schedule item; the notification channel carries a
+  # pre-recorded voice clip as its sound (see android/app/src/main/res/raw/).
+  flutter_local_notifications: ^18.0.1
+  # zonedSchedule needs a TZ database + the device's local zone.
+  timezone: ^0.9.4
+  flutter_timezone: ^3.0.1
+
+  # Text-to-speech: when a full-screen-intent reminder wakes the app, we read
+  # the actual schedule out loud ("오메가3 한 정 드실 시간이에요").
+  flutter_tts: ^4.2.0
+
+  # YAMNet sensing engine (lib/sensing/): mic PCM stream → TFLite inference →
+  # accelerometer-aided medication/meal scoring.
+  flutter_sound: ^9.30.0 # 16kHz mono PCM stream from the mic
+  tflite_flutter: ^0.12.1 # YAMNet + swallow CNN tflite models
+  permission_handler: ^12.0.3 # microphone permission
+  sensors_plus: ^7.0.0 # userAccelerometer for the "stationary" signal
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -65,6 +84,12 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # YAMNet sensing engine models + class map (used by lib/sensing/).
+  assets:
+    - assets/yamnet.tflite
+    - assets/yamnet_class_map.csv
+    - assets/ml/swallow_classifier.tflite
 
   # Pretendard — same design-system font as the guardian app (capstone_ui).
   fonts:

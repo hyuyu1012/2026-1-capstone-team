@@ -11,6 +11,35 @@ enum ScheduleKind {
       name == 'meal' ? ScheduleKind.meal : ScheduleKind.med;
 }
 
+/// How a medication relates to meals. Drives *when* the sensor opens the P2
+/// (medication) monitoring window:
+///   - [after]  : triggered by *detected meal completion* (M_chew stops ~3min),
+///                with the scheduled [ScheduleItem.time] as a clock fallback.
+///   - [before] : window opens ahead of the meal's scheduled time.
+///   - [none]   : meal-independent → pure clock-based window at [time]
+///                (skips the P1/gap meal phases entirely).
+/// Only meaningful for [ScheduleKind.med]; meal rows are always [none].
+enum MealRelation {
+  before, // 식전
+  after, // 식후
+  none; // 식사무관
+
+  /// Korean label for row metadata ("식전" / "식후" / "").
+  String get label => switch (this) {
+        MealRelation.before => '식전',
+        MealRelation.after => '식후',
+        MealRelation.none => '',
+      };
+
+  /// Parses the Firestore string. Unknown/missing → [none], so schedules the
+  /// guardian app wrote before this field existed still load correctly.
+  static MealRelation fromName(String? name) => switch (name) {
+        'before' => MealRelation.before,
+        'after' => MealRelation.after,
+        _ => MealRelation.none,
+      };
+}
+
 class ScheduleItem {
   const ScheduleItem({
     required this.id,
@@ -20,6 +49,7 @@ class ScheduleItem {
     this.dose,
     this.taken = false,
     this.takenAt,
+    this.mealRelation = MealRelation.none,
   });
 
   final String id;
@@ -29,6 +59,7 @@ class ScheduleItem {
   final String time; // "HH:mm" scheduled time
   final bool taken;
   final String? takenAt; // "HH:mm" completion time
+  final MealRelation mealRelation; // med only — 식전/식후/식사무관
 
   /// Minutes since midnight for the scheduled [time] — handy for the 24h ring.
   int get scheduledMinutes => _toMinutes(time);
@@ -41,7 +72,12 @@ class ScheduleItem {
     return int.parse(parts[0]) * 60 + int.parse(parts[1]);
   }
 
-  ScheduleItem copyWith({bool? taken, String? takenAt, bool clearTakenAt = false}) {
+  ScheduleItem copyWith({
+    bool? taken,
+    String? takenAt,
+    bool clearTakenAt = false,
+    MealRelation? mealRelation,
+  }) {
     return ScheduleItem(
       id: id,
       kind: kind,
@@ -50,6 +86,7 @@ class ScheduleItem {
       time: time,
       taken: taken ?? this.taken,
       takenAt: clearTakenAt ? null : (takenAt ?? this.takenAt),
+      mealRelation: mealRelation ?? this.mealRelation,
     );
   }
 
@@ -61,6 +98,7 @@ class ScheduleItem {
         time: map['time'] as String,
         taken: map['taken'] as bool? ?? false,
         takenAt: map['takenAt'] as String?,
+        mealRelation: MealRelation.fromName(map['mealRelation'] as String?),
       );
 
   Map<String, dynamic> toMap() => {
@@ -71,5 +109,6 @@ class ScheduleItem {
         'time': time,
         'taken': taken,
         'takenAt': takenAt,
+        'mealRelation': mealRelation.name,
       };
 }

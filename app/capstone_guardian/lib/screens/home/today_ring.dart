@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
@@ -8,8 +9,9 @@ import '../../widgets/care_icon.dart';
 
 /// 24-hour ring (home.jsx `TodayRing`): a track + a 0h→now progress arc, hour
 /// ticks, a "now" dot, and one marker per medication positioned at the time it
-/// was taken (or is scheduled). "Now" is the prototype's fixed 16:30.
-class TodayRing extends StatelessWidget {
+/// was taken (or is scheduled). "Now" tracks the real clock and refreshes each
+/// minute.
+class TodayRing extends StatefulWidget {
   const TodayRing({super.key, required this.items});
 
   final List<ScheduleItem> items;
@@ -18,7 +20,6 @@ class TodayRing extends StatelessWidget {
   static const double _r = 88;
   static const double _cx = _size / 2;
   static const double _cy = _size / 2;
-  static const int _nowMin = 16 * 60 + 30; // 16:30
 
   static Offset _polar(num minutes, double radius) {
     final deg = (minutes / (24 * 60)) * 360 - 90;
@@ -27,29 +28,64 @@ class TodayRing extends StatelessWidget {
   }
 
   @override
+  State<TodayRing> createState() => _TodayRingState();
+}
+
+class _TodayRingState extends State<TodayRing> {
+  late DateTime _now;
+  Timer? _timer;
+
+  int get _nowMin => _now.hour * 60 + _now.minute;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _scheduleTick();
+  }
+
+  /// Refresh on the next minute boundary, then every minute after.
+  void _scheduleTick() {
+    final next = DateTime(_now.year, _now.month, _now.day, _now.hour, _now.minute)
+        .add(const Duration(minutes: 1));
+    _timer = Timer(next.difference(_now), () {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _scheduleTick();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final meds = items.where((i) => i.kind == ScheduleKind.med).toList();
+    // Every schedule item (약 + 식사) gets a marker, not just medications.
+    final entries = widget.items;
 
     return Center(
       child: Padding(
         padding: const EdgeInsets.only(top: 4),
         child: SizedBox(
-          width: _size,
-          height: _size,
+          width: TodayRing._size,
+          height: TodayRing._size,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               // Arc, track, ticks, now-dot, markers.
               CustomPaint(
-                size: const Size(_size, _size),
-                painter: _RingPainter(meds),
+                size: const Size(TodayRing._size, TodayRing._size),
+                painter: _RingPainter(entries, _nowMin),
               ),
 
-              // Pill glyphs centered over each medication marker.
-              for (final m in meds) _pillOverlay(m),
+              // Kind glyph (약/식사) centered over each marker.
+              for (final m in entries) _pillOverlay(m),
 
               // Center "지금" + time.
-              const Positioned.fill(child: _CenterLabel()),
+              Positioned.fill(child: _CenterLabel(now: _now)),
 
               // Outer hour labels — anchored per quadrant like the CSS transforms.
               _hourLabel(0, const Offset(-0.5, -1.0)),
@@ -65,7 +101,7 @@ class TodayRing extends StatelessWidget {
 
   Widget _pillOverlay(ScheduleItem m) {
     final overdue = !m.taken && m.scheduledMinutes < _nowMin;
-    final pos = _polar(m.markerMinutes, _r);
+    final pos = TodayRing._polar(m.markerMinutes, TodayRing._r);
     final color = m.taken
         ? Colors.white
         : overdue
@@ -76,13 +112,13 @@ class TodayRing extends StatelessWidget {
       top: pos.dy,
       child: FractionalTranslation(
         translation: const Offset(-0.5, -0.5),
-        child: CareIcon(CareGlyph.med, size: 11, color: color, strokeWidth: 1.8),
+        child: CareIcon.forKind(m.kind, size: 11, color: color, strokeWidth: 1.8),
       ),
     );
   }
 
   Widget _hourLabel(int hour, Offset anchor) {
-    final pos = _polar(hour * 60, _r + 6);
+    final pos = TodayRing._polar(hour * 60, TodayRing._r + 6);
     return Positioned(
       left: pos.dx,
       top: pos.dy,
@@ -106,14 +142,18 @@ class TodayRing extends StatelessWidget {
 }
 
 class _CenterLabel extends StatelessWidget {
-  const _CenterLabel();
+  const _CenterLabel({required this.now});
+
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mm = now.minute.toString().padLeft(2, '0');
+    return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
+        const Text(
           '지금',
           style: TextStyle(
             fontSize: 9.5,
@@ -122,10 +162,10 @@ class _CenterLabel extends StatelessWidget {
             color: AppColors.labelNeutral,
           ),
         ),
-        SizedBox(height: 2),
+        const SizedBox(height: 2),
         Text(
-          '16:30',
-          style: TextStyle(
+          '$hh:$mm',
+          style: const TextStyle(
             fontFamily: AppType.displayFamily,
             fontSize: 26,
             fontWeight: FontWeight.w700,
@@ -141,9 +181,10 @@ class _CenterLabel extends StatelessWidget {
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter(this.meds);
+  _RingPainter(this.items, this.nowMin);
 
-  final List<ScheduleItem> meds;
+  final List<ScheduleItem> items;
+  final int nowMin;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -162,7 +203,7 @@ class _RingPainter extends CustomPainter {
 
     // Progress arc 0h → now (rounded caps).
     const start = -math.pi / 2; // top
-    final sweep = (TodayRing._nowMin / (24 * 60)) * 2 * math.pi;
+    final sweep = (nowMin / (24 * 60)) * 2 * math.pi;
     canvas.drawArc(
       rect,
       start,
@@ -186,12 +227,12 @@ class _RingPainter extends CustomPainter {
     }
 
     // Now indicator.
-    final now = TodayRing._polar(TodayRing._nowMin, TodayRing._r);
+    final now = TodayRing._polar(nowMin, TodayRing._r);
     canvas.drawCircle(now, 4.5, Paint()..color = AppColors.labelStrong);
 
-    // Medication markers.
-    for (final m in meds) {
-      final overdue = !m.taken && m.scheduledMinutes < TodayRing._nowMin;
+    // Schedule markers (약 + 식사).
+    for (final m in items) {
+      final overdue = !m.taken && m.scheduledMinutes < nowMin;
       final pos = TodayRing._polar(m.markerMinutes, TodayRing._r);
       canvas.drawCircle(
         pos,
@@ -212,5 +253,5 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.meds != meds;
+  bool shouldRepaint(_RingPainter old) => old.items != items || old.nowMin != nowMin;
 }

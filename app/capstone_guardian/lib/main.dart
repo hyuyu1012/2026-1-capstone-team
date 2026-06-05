@@ -11,7 +11,6 @@ import 'data/schedule_service.dart';
 import 'firebase_options.dart';
 import 'screens/onboarding/auth_gate.dart';
 import 'state/care_provider.dart';
-import 'state/settings_provider.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -43,7 +42,6 @@ class AnsimCareApp extends StatelessWidget {
           create: (_) => CareProvider(
               repository, patientService, scheduleService, dailyLogService),
         ),
-        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: MaterialApp(
         title: '안심 케어',

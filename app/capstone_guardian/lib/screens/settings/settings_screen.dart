@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/auth_service.dart';
 import '../../models/patient.dart';
 import '../../state/care_provider.dart';
-import '../../state/settings_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common.dart';
 import 'settings_widgets.dart';
 
-/// 설정 — patient profile, notifications, meds info, guardians, display, general.
+/// 설정 — patient profile, the room (invite) code guardians use to connect, the
+/// list of linked guardians, and a small mock 일반 section (개인정보처리방침 등).
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final care = context.watch<CareProvider>();
-    final settings = context.watch<SettingsProvider>();
     final patient = care.patient;
 
     return ListView(
@@ -29,78 +29,38 @@ class SettingsScreen extends StatelessWidget {
         const SizedBox(height: 20),
         if (patient != null) _ProfileCard(patient: patient),
 
-        // 알림
+        // 방 코드 — 보호자 연동용
+        if (patient != null) ...[
+          const SizedBox(height: 16),
+          _RoomCodeCard(code: patient.inviteCode),
+        ],
+
+        // 연동된 보호자
         SettingsSection(
-          title: '알림',
+          title: '연동된 보호자',
           topMargin: 24,
-          children: [
-            SettingsRow(
-              label: '복용 알림',
-              subtitle: '예정 시간에 알림을 보냅니다',
-              first: true,
-              control: AppToggle(value: settings.reminder, onChanged: settings.setReminder),
-            ),
-            SettingsRow(
-              label: '누락 알림',
-              subtitle: '30분 이상 지나면 다시 알려요',
-              control: AppToggle(value: settings.missedAlert, onChanged: settings.setMissedAlert),
-            ),
-            SettingsRow(
-              label: '보호자에게 푸시',
-              subtitle: '누락 시 가족에게 알림',
-              control: AppToggle(value: settings.guardianPush, onChanged: settings.setGuardianPush),
-            ),
-            SettingsRow(
-              label: '알림음',
-              subtitle: '기본 · 부드러운 차임',
-              control: AppToggle(value: settings.sound, onChanged: settings.setSound),
-            ),
-          ],
+          children: care.guardians.isEmpty
+              ? const [_EmptyGuardians()]
+              : [
+                  for (var i = 0; i < care.guardians.length; i++)
+                    GuardianRow(guardian: care.guardians[i], first: i == 0),
+                ],
         ),
 
-        // 복용 정보
-        SettingsSection(
-          title: '복용 정보',
-          children: [
-            NavRow(label: '복용 일정 관리', first: true, trailing: _metaText('${care.meds.length}개', bold: true)),
-            NavRow(label: '식사 시간 설정', trailing: _metaText('08:30 · 12:30 · 18:30')),
-            const NavRow(label: '처방 기록', subtitle: '병원 / 처방전 사진 보관'),
-          ],
-        ),
-
-        // 가족 · 보호자
-        SettingsSection(
-          title: '가족 · 보호자',
-          children: [
-            for (var i = 0; i < care.guardians.length; i++)
-              GuardianRow(guardian: care.guardians[i], first: i == 0),
-            const NavRow(label: '보호자 초대', primary: true),
-          ],
-        ),
-
-        // 화면
-        SettingsSection(
-          title: '화면',
-          children: [
-            SettingsRow(
-              label: '다크 모드',
-              first: true,
-              control: AppToggle(value: settings.darkMode, onChanged: settings.setDarkMode),
-            ),
-            FontSizeRow(
-              index: settings.fontSizeIndex,
-              onChanged: settings.setFontSizeIndex,
-            ),
-          ],
-        ),
-
-        // 일반
+        // 일반 (목업)
         SettingsSection(
           title: '일반',
           children: [
-            const NavRow(label: '개인정보 및 데이터', first: true),
-            const NavRow(label: '도움말 · 문의'),
-            NavRow(label: '앱 정보', trailing: _metaText('v1.0.0', weight: FontWeight.w500)),
+            NavRow(
+              label: '개인정보처리방침',
+              first: true,
+              onTap: () => _showMockup(context, '개인정보처리방침'),
+            ),
+            NavRow(
+              label: '이용약관',
+              onTap: () => _showMockup(context, '이용약관'),
+            ),
+            NavRow(label: '앱 정보', trailing: _metaText('v1.0.0')),
           ],
         ),
 
@@ -111,17 +71,144 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _metaText(String text, {bool bold = false, FontWeight? weight}) => Padding(
+  Widget _metaText(String text) => Padding(
         padding: const EdgeInsets.only(right: 6),
         child: Text(
           text,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
-            fontWeight: weight ?? (bold ? FontWeight.w700 : FontWeight.w600),
+            fontWeight: FontWeight.w500,
             color: AppColors.labelAlternative,
           ).tabular,
         ),
       );
+
+  /// Placeholder sheet for the mock 일반 rows — enough to show the entry exists.
+  void _showMockup(BuildContext context, String title) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: const Text(
+          '준비 중입니다.\n실제 문서는 추후 연결될 예정입니다.',
+          style: TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 방 코드 — the patient's invite code. Guardians enter it to link their app.
+class _RoomCodeCard extends StatelessWidget {
+  const _RoomCodeCard({required this.code});
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('방 코드', style: AppType.sectionLabel),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  code,
+                  style: const TextStyle(
+                    fontFamily: AppType.displayFamily,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 3,
+                    color: AppColors.labelStrong,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              _CopyButton(code: code),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '보호자에게 이 코드를 공유하면 환자와 연동돼요.',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              height: 1.4,
+              color: AppColors.labelNeutral,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CopyButton extends StatelessWidget {
+  const _CopyButton({required this.code});
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: code));
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('방 코드를 복사했어요'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      },
+      icon: const Icon(Icons.copy_rounded, size: 15, color: AppColors.primary),
+      label: const Text(
+        '복사',
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.06,
+          color: AppColors.primary,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        side: const BorderSide(color: AppColors.lineNormalNormal),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      ),
+    );
+  }
+}
+
+/// Shown inside the 연동된 보호자 card when no guardian has joined yet.
+class _EmptyGuardians extends StatelessWidget {
+  const _EmptyGuardians();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      child: Text(
+        '아직 연동된 보호자가 없어요.\n위의 방 코드를 공유해 보세요.',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          height: 1.45,
+          color: AppColors.labelNeutral,
+        ),
+      ),
+    );
+  }
 }
 
 class _ProfileCard extends StatelessWidget {
@@ -178,25 +265,6 @@ class _ProfileCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-          OutlinedButton(
-            onPressed: () {},
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              side: const BorderSide(color: AppColors.lineNormalNormal),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-            ),
-            child: const Text(
-              '편집',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.06,
-                color: AppColors.labelStrong,
-              ),
             ),
           ),
         ],
