@@ -13,6 +13,7 @@ class ScheduleRow extends StatelessWidget {
     required this.first,
     this.onTap,
     this.onLongPress,
+    this.trailing,
     this.missed = false,
     this.overdue = false,
   });
@@ -21,6 +22,10 @@ class ScheduleRow extends StatelessWidget {
   final bool first;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
+  /// Optional trailing widget (e.g. 수정/삭제 아이콘 버튼) rendered after the
+  /// name/time. Its own tap targets take precedence over the row's [onTap].
+  final Widget? trailing;
 
   /// When the item is not taken: `true` → missed (red ✕), `false` → pending.
   final bool missed;
@@ -68,6 +73,7 @@ class ScheduleRow extends StatelessWidget {
               ],
             ),
           ),
+          ?trailing,
         ],
       ),
     );

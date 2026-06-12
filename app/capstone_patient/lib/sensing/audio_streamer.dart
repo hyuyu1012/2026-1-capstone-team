@@ -21,15 +21,34 @@ class AudioStreamer {
   bool _isRunning = false;
   bool get isRunning => _isRunning;
 
+  /// openRecorder()가 완료됐는지. 서비스 isolate는 메인의 레코더를 물려받지 못하므로
+  /// init()을 못 거친 경로로 start()가 와도 녹음 전 한 번은 열리도록 가드한다.
+  bool _isOpen = false;
+
   /// 청크가 모일 때마다 호출되는 콜백
   void Function(Float32List chunk)? onChunk;
 
   Future<void> init() async {
-    await _recorder.openRecorder();
+    await _ensureOpen();
+  }
+
+  /// 레코더가 열려 있지 않으면 연다(한 번만). init()과 start() 양쪽에서 안전하게
+  /// 호출 가능 — "Recorder is not open" 방지.
+  Future<void> _ensureOpen() async {
+    if (_isOpen) return;
+    // 이 레코더는 Activity 없는 flutter_foreground_task 서비스 isolate에서 열린다.
+    // flutter_sound의 recorder 채널(xyz.canardoux.flutter_sound_recorder)은
+    // onAttachedToActivity에서만 등록되므로, Activity가 없으면 openRecorder가
+    // MissingPluginException으로 죽는다(docs/log4.md). isBGService:true는 먼저
+    // bgservice 채널의 setBGService를 호출해 Activity 없이 recorder 채널을
+    // 등록(attachFlauto)시킨 뒤 세션을 연다 — flutter_sound의 백그라운드 경로.
+    await _recorder.openRecorder(isBGService: true);
+    _isOpen = true;
   }
 
   Future<void> start() async {
     if (_isRunning) return;
+    await _ensureOpen(); // init을 못 거친 경로(서비스 isolate)여도 녹음 전 보장
     _buffer.clear();
 
     _pcmController = StreamController<Uint8List>();
@@ -79,5 +98,6 @@ class AudioStreamer {
   Future<void> dispose() async {
     await stop();
     await _recorder.closeRecorder();
+    _isOpen = false;
   }
 }

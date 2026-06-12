@@ -9,16 +9,17 @@
 //   MedPhaseController ─ onChanged ─▶ scorer.setPhase() + 마이크 start/stop
 //   AudioStreamer ─ onChunk ─▶ Yamnet · Drink · Swallow ─▶ MedicationScorer
 //   가속도계 ─▶ scorer.updateAccelerometer
-//   scorer.onTrigger(80점↑) ─▶ p2: onMedConfirmed / gap: onUnknownMed
+//   scorer.onTrigger(80점↑) ─▶ p2: onMedConfirmed
 //   식사 상태머신(eaten) ─▶ onMealEaten + controller.notifyMealCompleted
 //
 // Firestore는 모른다(콜백으로만 결과 전달). 마이크 정책=(1) 예정시간 근처만:
-// controller.micActive를 그대로 따라 켜고 끈다(p1→gap→p2는 연속 유지).
+// controller.micActive를 그대로 따라 켜고 끈다(p1→p2는 연속 유지).
 // ─────────────────────────────────────────────────────────────
 
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -34,15 +35,23 @@ import 'yamnet_classifier.dart';
 
 class MedSensingService {
   // ── YAMNet main.dart 튜닝 상수 (그대로 이식) ──
-  static const double chewingThreshold = 0.45;
+  // [2026-06-09] 식사(씹기) 인식이 잘 안 돼 0.45 → 0.3으로 완화.
+  static const double chewingThreshold = 0.3;
   static const double kCnnSwallowThreshold = 0.30;
-
+  /// swallow riseRatio 상한. 이보다 가파른 상승은 충격음(페트병·컵을 단단한
+  /// 면에 내려놓는 소리 등)으로 보고 CNN 추론 자체를 건너뛴다.
+  /// 하한(DrinkDetector 3.0)만으로는 transient를 못 거른다 — 실측에서 페트병
+  /// 내려놓기가 rise 46~53으로 떴고, 부드러운 삼킴과 프로파일이 정반대다.
+  /// ※ 20.0은 보수적 시작값. 진짜 삼킴 rise 실측 분포 확인 후 조정.
+  static const double kRiseRatioMax = 20.0;
   /// p2 트리거 → 그 약을 복용으로 확정. (scheduleId, 확정 시각)
   /// Provider가 patientId를 모른 채 서비스를 만들고, 환자 확정 후 바인더가
   /// 채우므로 final이 아니다.
   void Function(String scheduleId, DateTime at)? onMedConfirmed;
 
-  /// gap 트리거 → 어느 약인지 미정. (점수, 시각) → 상위에서 pendingMeds 처리.
+  /// 어느 약인지 미정인 복약 트리거. (점수, 시각) → 상위에서 pendingMeds 처리.
+  /// [2026-06-09] gap(공백기) 단계를 제거하면서 현재 이 콜백을 발생시키는 경로가
+  ///   없다(휴면). pendingMeds 배선은 유지하되, 호출자가 다시 생기기 전까지 미사용.
   void Function(int score, DateTime at)? onUnknownMed;
 
   /// 식사 완료 감지. (mealId, 완료 시각) → 상위에서 meal taken/mealStatus 기록.
@@ -80,7 +89,13 @@ class MedSensingService {
   // ── 초기화: 모델 로드 + 오디오 파이프라인 연결 ──
   Future<void> init() async {
     _scorer = MedicationScorer(onTrigger: _onScorerTrigger);
-    _controller = MedPhaseController(onChanged: _onPhaseChanged);
+    // [2026-06-09] 식후약은 "식사완료" 이벤트로 P2 창을 연다(afterMedUsesMealEvent).
+    // 연결된 식사가 +90분(kMealMaxDuration) 안에 감지되면 그 시점부터 창을 열고,
+    // 끝내 감지 못 하면 창을 열지 않는다(폴백 없음). 식전/식사무관은 약 time 시계.
+    _controller = MedPhaseController(
+      onChanged: _onPhaseChanged,
+      afterMedUsesMealEvent: true,
+    );
     await _classifier.loadModel();
     await _swallow.init('assets/ml/swallow_classifier.tflite');
     await _streamer.init();
@@ -125,9 +140,14 @@ class MedSensingService {
     if (d.phase == MedPhase.p1 && prev.phase != MedPhase.p1) {
       _meal.reset(); // 식사 창 진입 → 새 식사 세션 시작
     } else if (prev.phase == MedPhase.p1 && d.phase != MedPhase.p1) {
-      // 식사 창 이탈 → 식사 중이었으면 eaten으로 마무리(3분 무음 못 채운 경우)
-      if (_meal.finalizeOnExit() && prev.targetId != null) {
-        _onMealEaten(prev.targetId!, DateTime.now());
+      // 식사 창 이탈 → 식사 중이었으면 eaten으로 마무리(무음/시간 못 채운 안전망).
+      // 단, 그 식사가 삭제·스킵되어 목록에서 빠진 경우엔 마무리하지 않는다
+      // (스킵/삭제를 '먹음'으로 오기록 + 식후약 창 오픈하는 것 방지).
+      final prevId = prev.targetId;
+      if (prevId != null &&
+          _controller.hasMeal(prevId) &&
+          _meal.finalizeOnExit()) {
+        _onMealEaten(prevId, DateTime.now());
       }
     }
 
@@ -166,7 +186,11 @@ class MedSensingService {
   }
 
   Future<bool> _ensureMicPermission() async {
-    final status = await Permission.microphone.request();
+    // 이 서비스는 Activity 없는 서비스 isolate에서 돈다. Permission.request()는
+    // 권한 다이얼로그를 띄우려 Activity를 찾다가 플랫폼 채널에서 throw한다
+    // (docs/log2.md). 실제 요청은 메인(UI) isolate의 requestPermissions()가
+    // 이미 끝냈으므로, 여기선 Activity가 필요 없는 status 조회만 한다.
+    final status = await Permission.microphone.status;
     _micPermissionDenied = !status.isGranted;
     return status.isGranted;
   }
@@ -184,8 +208,8 @@ class MedSensingService {
     final cScore = _classifier.chewingScore(all);
     final event = _drink.process(chunk);
 
-    _swallow.feedFloat32(chunk);
-    final cnnScore = _swallow.lastScore;
+    // CNN 버퍼는 매 청크 누적해 연속성 유지(추론은 아래 IIR 게이트 통과 시에만).
+    _swallow.pushAudio(chunk);
 
     // 0) M_chew (음식 오탐 negative signal) 먼저 반영
     final chewing = cScore >= chewingThreshold;
@@ -204,17 +228,41 @@ class MedSensingService {
     for (final r in indexed) {
       _scorer.addYamnetResult(r.index, r.score);
     }
-    // 2) 꿀꺽: CNN과 IIR이 같은 chunk에서 모두 감지될 때만 swallow 반영
-    final swallowDetected = cnnScore >= kCnnSwallowThreshold && event.detected;
-    if (swallowDetected) {
-      _scorer.addSwallowDetection(confidence: cnnScore);
+        // 2) 꿀꺽 (직렬 cascade + 물게이트 + transient 상한):
+    //    IIR 통과 && 물보류창 밖 && "충격음 아님"일 때만 CNN을 켠다.
+    //    페트병/컵 내려놓기는 rise가 비정상적으로 높아(실측 46~53) 여기서 탈락.
+    final rise = event.riseRatio; // ← DrinkDetector event의 상승비 필드 (이름 확인)
+    final isTransient = rise > kRiseRatioMax;
+
+    if (event.detected && !_scorer.inWaterHold() && !isTransient) {
+      final cnnScore = _swallow.inferLatest();
+      debugPrint('[SENSE] iir-hit → cnn=${cnnScore.toStringAsFixed(2)}'
+          ' prereq=${_scorer.swallowAllowed()}'
+          ' rise=${rise.toStringAsFixed(1)}');
+      if (cnnScore >= kCnnSwallowThreshold) {
+        _scorer.addSwallowDetection(confidence: cnnScore);
+      }
+    } else if (event.detected && isTransient) {
+      // 충격음으로 드롭된 케이스 — 튜닝 가시화용. 검증 끝나면 제거.
+      debugPrint('[SENSE] iir-hit DROPPED(transient)'
+          ' rise=${rise.toStringAsFixed(1)} > $kRiseRatioMax');
     }
+
+    // [디버그 로그, 2026-06-09] 파이프라인 가시화 — 청크당 1줄(초당 ~1회).
+    // 튜닝/검증이 끝나면 제거. logcat에서 `[SENSE]`로 필터.
+    debugPrint('[SENSE] ${_decision.phase.name}'
+        '${_decision.targetId != null ? "(${_decision.targetId})" : ""}'
+        ' chew=${cScore.toStringAsFixed(2)}${chewing ? "✓" : ""}'
+        ' iir=${event.detected ? "Y" : "n"}'
+        ' meal=${_meal.status.name}'
+        ' score=${_scorer.currentScore}');
 
     _emit();
   }
 
   // ── 식사 완료 → 식후약 P2 트리거 + 상위 기록 콜백 ──
   void _onMealEaten(String mealId, DateTime at) {
+    debugPrint('[SENSE] 🍽 MEAL EATEN: $mealId @ $at');
     _controller.notifyMealCompleted(mealId, at); // 식후약(after) P2 창을 연다
     onMealEaten?.call(mealId, at); // Firestore: meal taken/mealStatus
   }
@@ -225,10 +273,11 @@ class MedSensingService {
     switch (r.phase) {
       case MedPhase.p2:
         final id = _decision.targetId;
-        if (id != null) onMedConfirmed?.call(id, at);
-        break;
-      case MedPhase.gap:
-        onUnknownMed?.call(r.score, at);
+        if (id != null) {
+          debugPrint('[SENSE] 💊 MED CONFIRMED: $id (score=${r.score})');
+          _controller.notifyMedTaken(id); // 복용 확정 → 그 약 감시 창 즉시 종료
+          onMedConfirmed?.call(id, at);
+        }
         break;
       case MedPhase.p1:
       case MedPhase.idle:

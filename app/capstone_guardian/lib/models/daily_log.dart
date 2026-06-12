@@ -16,8 +16,11 @@ class DailyLog {
   int get total => items.length;
   int get done => items.where((i) => i.taken).length;
 
-  /// 0..1 adherence for the day, or null when there are no items.
-  double? get completion => total == 0 ? null : done / total;
+  /// 건너뛴(의도적 스킵) 항목을 제외한 완료율의 분모 — 스킵은 완료율을 깎지 않는다.
+  int get _counted => items.where((i) => !i.skipped).length;
+
+  /// 0..1 adherence for the day, or null when there are no (non-skipped) items.
+  double? get completion => _counted == 0 ? null : done / _counted;
 
   factory DailyLog.fromMap(Map<String, dynamic> map) {
     final raw = (map['items'] as Map<String, dynamic>?) ?? const {};

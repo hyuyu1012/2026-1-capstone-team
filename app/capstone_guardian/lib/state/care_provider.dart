@@ -29,9 +29,13 @@ class CareProvider extends ChangeNotifier {
   final ScheduleService _scheduleService;
   final DailyLogService _dailyLogService;
 
-  /// "Now" as used by the 24h ring / toggle completion stamp. Matches the
-  /// prototype's fixed clock so the design renders identically.
-  static const String now = '16:32';
+  /// Current wall-clock time as "HH:mm" — the default completion stamp when the
+  /// guardian checks an item without entering an explicit time.
+  static String _nowStamp() {
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:'
+        '${now.minute.toString().padLeft(2, '0')}';
+  }
 
   String? _boundUid;
   StreamSubscription<List<Patient>>? _patientsSub;
@@ -62,7 +66,8 @@ class CareProvider extends ChangeNotifier {
   List<MissedItem> get missed => _missed;
 
   int get doneCount => _todayItems.where((i) => i.taken).length;
-  int get totalCount => _todayItems.length;
+  // 건너뛴 항목은 분모에서 제외 — 의도적 스킵은 완료율을 깎지 않는다.
+  int get totalCount => _todayItems.where((i) => !i.skipped).length;
 
   /// Start listening for any patient whose `guardianIds` contains [uid]. Safe
   /// to call repeatedly with the same uid (no-op). Switches subscription if a
@@ -144,24 +149,28 @@ class CareProvider extends ChangeNotifier {
     _restLoading = false;
   }
 
-  /// Optimistically flip an item's taken state, then persist. The completion
-  /// time stamps [now] when checking on, and clears when unchecking.
-  Future<void> toggleItem(String id) async {
+  /// Optimistically flip an item's taken state, then persist. When checking on,
+  /// the completion time is [takenAt] (the time the guardian entered) or the
+  /// current wall-clock time if omitted; unchecking clears it.
+  Future<void> toggleItem(String id, {String? takenAt}) async {
     final idx = _todayItems.indexWhere((i) => i.id == id);
     if (idx < 0) return;
     final current = _todayItems[idx];
     final nextTaken = !current.taken;
+    final stamp = nextTaken ? (takenAt ?? _nowStamp()) : null;
     final updated = current.copyWith(
       taken: nextTaken,
-      takenAt: nextTaken ? now : null,
+      takenAt: stamp,
       clearTakenAt: !nextTaken,
+      // 완료 처리하면 "건너뜀"은 자동 해제 (상호 배타적).
+      skipped: nextTaken ? false : null,
     );
     _todayItems = [..._todayItems]..[idx] = updated;
     notifyListeners();
     final patient = _patient;
     if (patient != null) {
       await _scheduleService.setTaken(patient.id, id,
-          taken: nextTaken, takenAt: nextTaken ? now : null);
+          taken: nextTaken, takenAt: stamp);
       // 홈 체크를 오늘자 dailyLog에 하루치 스냅샷으로 기록해, 오늘 완료율이
       // 홈과 일치하고 기록/통계에 반영되도록 한다.
       final today = DateTime.now();
@@ -177,6 +186,38 @@ class CareProvider extends ChangeNotifier {
     } else {
       await _repo.setItemTaken(id, nextTaken);
     }
+  }
+
+  /// 오늘 항목을 의도적으로 "건너뜀"으로 토글한다. 완료 상태와 상호 배타적이라
+  /// 건너뛰면 완료/완료시각은 비운다. 건너뛴 항목은 통계에서 누락으로 잡히지
+  /// 않는다. 낙관적 갱신 후 Firestore + 오늘자 dailyLog에 반영한다.
+  Future<void> skipItem(String id) async {
+    final idx = _todayItems.indexWhere((i) => i.id == id);
+    if (idx < 0) return;
+    final current = _todayItems[idx];
+    final nextSkipped = !current.skipped;
+    final updated = current.copyWith(
+      skipped: nextSkipped,
+      taken: false,
+      clearTakenAt: true,
+    );
+    _todayItems = [..._todayItems]..[idx] = updated;
+    notifyListeners();
+    final patient = _patient;
+    if (patient == null) return; // mock 모드 — 로컬 상태만 변경
+    await _scheduleService.setSkipped(patient.id, id, skipped: nextSkipped);
+    // 오늘자 dailyLog 스냅샷 갱신 후 통계(_month/_missed) 재계산.
+    final today = DateTime.now();
+    await _dailyLogService.recordDay(
+      patient.id,
+      DailyLogService.dateId(today.year, today.month, today.day),
+      _todayItems,
+    );
+    _month = await _dailyLogService.monthOverview(
+        patient.id, today.year, today.month, today);
+    _missed =
+        await _dailyLogService.missedItems(patient.id, today.year, today.month);
+    notifyListeners();
   }
 
   /// Remove a schedule item (meal or med) from the patient's schedule.

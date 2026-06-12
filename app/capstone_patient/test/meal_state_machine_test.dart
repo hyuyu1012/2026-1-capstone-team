@@ -14,35 +14,35 @@ void main() {
       final m = MealStateMachine();
       m.onChew(_at(8, 0));
       m.onChew(_at(8, 0, 1));
-      expect(m.status, MealStatus.notEaten, reason: '2회는 임계(3) 미만');
+      expect(m.status, MealStatus.notEaten, reason: '2회는 임계(4) 미만');
     });
 
-    test('씹기 3회 이상 → inProgress', () {
+    test('씹기 4회 이상 → inProgress', () {
       final m = MealStateMachine();
-      m.onChew(_at(8, 0));
-      m.onChew(_at(8, 0, 1));
-      m.onChew(_at(8, 0, 2));
-      expect(m.status, MealStatus.inProgress);
-    });
-
-    test('마지막 씹기 후 3분 무음 → eaten (tick true 한 번만)', () {
-      final m = MealStateMachine();
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 4; i++) {
         m.onChew(_at(8, 0, i));
       }
-      // 2분 경과: 아직 식사 중
-      expect(m.tick(_at(8, 2, 2)), isFalse);
       expect(m.status, MealStatus.inProgress);
-      // 3분 경과: 완료
-      expect(m.tick(_at(8, 3, 3)), isTrue);
+    });
+
+    test('마지막 씹기 후 30초 무음 → eaten (tick true 한 번만)', () {
+      final m = MealStateMachine();
+      for (var i = 0; i < 4; i++) {
+        m.onChew(_at(8, 0, i)); // 마지막 씹기 08:00:03
+      }
+      // 20초 경과: 아직 식사 중
+      expect(m.tick(_at(8, 0, 23)), isFalse);
+      expect(m.status, MealStatus.inProgress);
+      // 마지막 씹기 후 30초 경과: 완료
+      expect(m.tick(_at(8, 0, 35)), isTrue);
       expect(m.status, MealStatus.eaten);
       // 다시 tick해도 중복 발사 없음
-      expect(m.tick(_at(8, 4, 0)), isFalse);
+      expect(m.tick(_at(8, 1, 0)), isFalse);
     });
 
     test('eaten 후 추가 씹기는 무시 (재시작 안 함)', () {
       final m = MealStateMachine();
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 4; i++) {
         m.onChew(_at(8, 0, i));
       }
       m.tick(_at(8, 3, 3)); // eaten
@@ -52,7 +52,7 @@ void main() {
 
     test('식사 중 창 닫힘 → finalizeOnExit가 eaten으로 마무리', () {
       final m = MealStateMachine();
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 4; i++) {
         m.onChew(_at(8, 0, i));
       }
       expect(m.status, MealStatus.inProgress);
@@ -68,7 +68,7 @@ void main() {
 
     test('reset 후 새 식사 세션', () {
       final m = MealStateMachine();
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 4; i++) {
         m.onChew(_at(8, 0, i));
       }
       m.finalizeOnExit();

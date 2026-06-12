@@ -25,12 +25,9 @@ const List<({String id, String label})> _dayOptions = [
 ];
 const List<String> _weekdays = ['mon', 'tue', 'wed', 'thu', 'fri'];
 
-// In the real app these come from the patient's registered meals.
-const List<({String id, String name, String time})> _registeredMeals = [
-  (id: 'breakfast', name: '아침', time: '08:30'),
-  (id: 'lunch', name: '점심', time: '12:30'),
-  (id: 'dinner', name: '저녁', time: '18:30'),
-];
+/// One row in the 복용 식사 picker. Built at runtime from the patient's
+/// registered meal schedules (see [_MedRegisterSheetState._registeredMeals]).
+typedef MealRef = ({String id, String name, String time});
 
 // `sign` is the direction relative to the meal (식전 = before = -1, 식후 = +1);
 // the magnitude (minutes) is chosen by the guardian per registration.
@@ -68,7 +65,7 @@ String _addMinutes(String time, int mins) {
 /// no patient is connected yet.
 Future<void> _saveSchedules(
   BuildContext context,
-  List<({ScheduleKind kind, String name, String? dose, String time, List<String> days})> items,
+  List<({ScheduleKind kind, String name, String? dose, String time, List<String> days, String? mealRelation, String? mealId})> items,
 ) async {
   final patient = context.read<CareProvider>().patient;
   final messenger = ScaffoldMessenger.of(context);
@@ -89,6 +86,8 @@ Future<void> _saveSchedules(
         dose: it.dose,
         time: it.time,
         days: it.days,
+        mealRelation: it.mealRelation,
+        mealId: it.mealId,
       );
     }
     messenger.showSnackBar(SnackBar(
@@ -120,7 +119,6 @@ class _MealRegisterSheetState extends State<MealRegisterSheet> {
   final _name = TextEditingController();
   String _time = '08:30';
   final Set<String> _days = {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'};
-  bool _guardianCanDefer = true;
 
   bool get _everyDay => _days.length == 7;
   bool get _isWeekday => _days.length == 5 && _weekdays.every(_days.contains);
@@ -156,6 +154,8 @@ class _MealRegisterSheetState extends State<MealRegisterSheet> {
           dose: null,
           time: _time,
           days: _days.toList(),
+          mealRelation: null,
+          mealId: null,
         ),
       ]),
       children: [
@@ -261,15 +261,6 @@ class _MealRegisterSheetState extends State<MealRegisterSheet> {
             ],
           ],
         ),
-        const SizedBox(height: 22),
-
-        // 권한
-        const FieldLabel('권한'),
-        GuardianDeferCard(
-          checked: _guardianCanDefer,
-          subtitle: '식사 시간을 30분~2시간 미룰 수 있어요.',
-          onTap: () => setState(() => _guardianCanDefer = !_guardianCanDefer),
-        ),
         const SizedBox(height: 8),
       ],
     );
@@ -371,7 +362,6 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
   final Set<String> _meals = {};
   final Set<String> _timings = {'after'};
   int _offsetMin = 30; // 식사 기준 ±몇 분에 복용 알림을 줄지 (사용자 조절)
-  bool _guardianCanDefer = true;
 
   bool get _canSave =>
       _name.text.trim().isNotEmpty && _meals.isNotEmpty && _timings.isNotEmpty;
@@ -383,15 +373,28 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
     super.dispose();
   }
 
-  List<({String label, String time})> get _preview {
-    final out = <({String label, String time})>[];
-    for (final m in _registeredMeals) {
+  /// The patient's registered meal schedules, in time order — the source for
+  /// the 복용 식사 options (previously hard-coded mock data). Empty until a
+  /// meal is registered for the bound patient.
+  List<MealRef> _registeredMeals(BuildContext context) => context
+      .watch<CareProvider>()
+      .todayItems
+      .where((i) => i.kind == ScheduleKind.meal)
+      .map((i) => (id: i.id, name: i.name, time: i.time))
+      .toList();
+
+  List<({String label, String time, String mealRelation, String mealId})>
+      _previewFor(List<MealRef> meals) {
+    final out = <({String label, String time, String mealRelation, String mealId})>[];
+    for (final m in meals) {
       if (!_meals.contains(m.id)) continue;
       for (final t in _timingOptions) {
         if (!_timings.contains(t.id)) continue;
         out.add((
           label: '${m.name} ${t.label} $_offsetMin분',
           time: _addMinutes(m.time, t.sign * _offsetMin),
+          mealRelation: t.id, // 'before' | 'after' — 환자 앱 연동용
+          mealId: m.id, // 어느 식사에 붙은 약인지(식후 감지 트리거 대상)
         ));
       }
     }
@@ -401,7 +404,8 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final preview = _preview;
+    final meals = _registeredMeals(context);
+    final preview = _previewFor(meals);
     return SheetShell(
       title: '복용 약 등록',
       canSave: _canSave,
@@ -415,6 +419,8 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
               dose: _dose.text.trim().isEmpty ? null : _dose.text.trim(),
               time: line.time,
               days: const <String>[],
+              mealRelation: line.mealRelation,
+              mealId: line.mealId,
             ),
         ],
       ),
@@ -427,23 +433,28 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
         SheetTextField(controller: _dose, placeholder: '예: 5mg 1정', onChanged: (_) => setState(() {})),
         const SizedBox(height: 22),
 
-        // 복용 식사
+        // 복용 식사 — 환자에게 등록된 실제 식사 일정에서 가져온다.
         const FieldLabel('복용 식사'),
-        for (var i = 0; i < _registeredMeals.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _MealOption(
-            meal: _registeredMeals[i],
-            active: _meals.contains(_registeredMeals[i].id),
-            onTap: () => setState(() {
-              final id = _registeredMeals[i].id;
-              _meals.contains(id) ? _meals.remove(id) : _meals.add(id);
-            }),
-          ),
-        ],
+        if (meals.isEmpty)
+          const _NoMealsNotice()
+        else
+          for (var i = 0; i < meals.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _MealOption(
+              meal: meals[i],
+              active: _meals.contains(meals[i].id),
+              onTap: () => setState(() {
+                final id = meals[i].id;
+                _meals.contains(id) ? _meals.remove(id) : _meals.add(id);
+              }),
+            ),
+          ],
         const SizedBox(height: 8),
-        const Text(
-          '등록된 식사 일정에 맞춰 복용 알림을 보냅니다.',
-          style: TextStyle(
+        Text(
+          meals.isEmpty
+              ? '먼저 식사 일정을 등록하면 그 시간에 맞춰 복용 알림을 보낼 수 있어요.'
+              : '등록된 식사 일정에 맞춰 복용 알림을 보냅니다.',
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w500,
             height: 1.5,
@@ -487,26 +498,56 @@ class _MedRegisterSheetState extends State<MedRegisterSheet> {
 
         // 알림 시각 미리보기
         if (preview.isNotEmpty) ...[
-          _PreviewBox(lines: preview),
+          _PreviewBox(lines: [
+            for (final l in preview) (label: l.label, time: l.time),
+          ]),
           const SizedBox(height: 22),
         ],
 
-        // 권한
-        const FieldLabel('권한'),
-        GuardianDeferCard(
-          checked: _guardianCanDefer,
-          subtitle: '복용 시각을 30분~2시간 미룰 수 있어요.',
-          onTap: () => setState(() => _guardianCanDefer = !_guardianCanDefer),
-        ),
         const SizedBox(height: 8),
       ],
     );
   }
 }
 
+/// Shown in place of the meal options when the patient has no registered meal
+/// schedule yet — med timing is anchored to meals, so there's nothing to pick.
+class _NoMealsNotice extends StatelessWidget {
+  const _NoMealsNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.fillAlternative,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.lineNormalNormal),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.restaurant_outlined, size: 18, color: AppColors.labelAlternative),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '등록된 식사 일정이 없어요.',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.065,
+                color: AppColors.labelNeutral,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MealOption extends StatelessWidget {
   const _MealOption({required this.meal, required this.active, required this.onTap});
-  final ({String id, String name, String time}) meal;
+  final MealRef meal;
   final bool active;
   final VoidCallback onTap;
 
@@ -1167,68 +1208,3 @@ class SquareCheck extends StatelessWidget {
   }
 }
 
-/// "보호자가 일정을 미룰 수 있게 할까요?" card with a square checkbox.
-class GuardianDeferCard extends StatelessWidget {
-  const GuardianDeferCard({
-    super.key,
-    required this.checked,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final bool checked;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.lineNormalNormal),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: SquareCheck(checked: checked),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '보호자가 일정을 미룰 수 있게 할까요?',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.0675,
-                      color: AppColors.labelStrong,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.023,
-                      height: 1.45,
-                      color: AppColors.labelNeutral,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -33,6 +33,23 @@ class ScheduleService {
     return _schedules(patientId).doc(scheduleId).update({
       'taken': taken,
       'takenAt': taken ? takenAt : null,
+      // 완료 처리하면 "건너뜀"은 자동 해제 (상호 배타적).
+      if (taken) 'skipped': false,
+    });
+  }
+
+  /// 오늘 하루 일정을 의도적으로 건너뛴(또는 그 해제) 상태로 표시. 건너뛰면
+  /// 완료 상태는 비운다. 통계에서 누락으로 집계되지 않도록 환자 앱·기록이 이
+  /// 필드를 읽는다.
+  Future<void> setSkipped(
+    String patientId,
+    String scheduleId, {
+    required bool skipped,
+  }) {
+    return _schedules(patientId).doc(scheduleId).update({
+      'skipped': skipped,
+      if (skipped) 'taken': false,
+      if (skipped) 'takenAt': null,
     });
   }
 
@@ -44,6 +61,8 @@ class ScheduleService {
     required String time,
     String? dose,
     List<String> days = const [],
+    String? mealRelation,
+    String? mealId,
   }) async {
     final doc = _schedules(patientId).doc();
     await doc.set({
@@ -54,6 +73,11 @@ class ScheduleService {
       'days': days,
       'taken': false,
       'takenAt': null,
+      'skipped': false,
+      // 환자 앱 연동: 식후약(mealRelation='after')은 'mealId'가 가리키는 식사가
+      // 감지 완료되는 시점에 복약 감시 창이 열린다. 식전은 시계 기반(라벨 용도).
+      'mealRelation': ?mealRelation,
+      'mealId': ?mealId,
       'createdAt': FieldValue.serverTimestamp(),
     });
     return doc.id;

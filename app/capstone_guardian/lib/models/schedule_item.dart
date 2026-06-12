@@ -20,6 +20,9 @@ class ScheduleItem {
     this.dose,
     this.taken = false,
     this.takenAt,
+    this.skipped = false,
+    this.mealRelation,
+    this.mealId,
   });
 
   final String id;
@@ -29,6 +32,15 @@ class ScheduleItem {
   final String time; // "HH:mm" scheduled time
   final bool taken;
   final String? takenAt; // "HH:mm" completion time
+
+  /// 오늘 하루 의도적으로 건너뛴 항목. 완료(taken)와 상호 배타적이며, 통계에서
+  /// 누락으로 집계하지 않는다 (보호자가 "오늘은 안 함"으로 표시).
+  final bool skipped;
+
+  /// 약-식사 관계('before'/'after'/null) 및 연결된 식사 id. 등록 시 기록하며,
+  /// 환자 앱이 식후약을 어느 식사에 맞춰 감지할지 결정하는 데 쓴다.
+  final String? mealRelation;
+  final String? mealId;
 
   /// Minutes since midnight for the scheduled [time] — handy for the 24h ring.
   int get scheduledMinutes => _toMinutes(time);
@@ -47,8 +59,11 @@ class ScheduleItem {
     String? time,
     bool? taken,
     String? takenAt,
+    bool? skipped,
     bool clearTakenAt = false,
     bool clearDose = false,
+    String? mealRelation,
+    String? mealId,
   }) {
     return ScheduleItem(
       id: id,
@@ -58,6 +73,9 @@ class ScheduleItem {
       time: time ?? this.time,
       taken: taken ?? this.taken,
       takenAt: clearTakenAt ? null : (takenAt ?? this.takenAt),
+      skipped: skipped ?? this.skipped,
+      mealRelation: mealRelation ?? this.mealRelation,
+      mealId: mealId ?? this.mealId,
     );
   }
 
@@ -69,6 +87,9 @@ class ScheduleItem {
         time: map['time'] as String,
         taken: map['taken'] as bool? ?? false,
         takenAt: map['takenAt'] as String?,
+        skipped: map['skipped'] as bool? ?? false,
+        mealRelation: map['mealRelation'] as String?,
+        mealId: map['mealId'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -79,5 +100,8 @@ class ScheduleItem {
         'time': time,
         'taken': taken,
         'takenAt': takenAt,
+        'skipped': skipped,
+        'mealRelation': mealRelation,
+        'mealId': mealId,
       };
 }

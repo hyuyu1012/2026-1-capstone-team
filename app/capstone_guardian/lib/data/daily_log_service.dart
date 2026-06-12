@@ -88,7 +88,8 @@ class DailyLogService {
     final counts = <String, int>{}; // "name|time" -> missed days
     for (final log in logs) {
       for (final it in log.items) {
-        if (!it.taken) {
+        // 건너뛴 항목은 의도적 스킵이므로 누락으로 집계하지 않는다.
+        if (!it.taken && !it.skipped) {
           final key = '${it.name}|${it.time}';
           counts[key] = (counts[key] ?? 0) + 1;
         }
@@ -110,6 +111,7 @@ class DailyLogService {
         'time': i.time,
         'taken': i.taken,
         'takenAt': i.takenAt,
+        'skipped': i.skipped,
       };
 
   /// Record a full day's schedule snapshot (the 홈 toggle path). Writes every
